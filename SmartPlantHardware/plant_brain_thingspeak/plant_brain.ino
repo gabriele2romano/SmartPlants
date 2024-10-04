@@ -45,7 +45,6 @@ String debug_topic = "smart_plants_debug";
 String smart_mirror_topic = "smart_mirror";
 
 String tmp;
-String tmp1;
 int wifi_cell = 1;
 const int maxTries = 50;
 
@@ -185,12 +184,12 @@ void smartconfig_setup_wifi() {
 
   Serial.print("SSID: ");
   Serial.println(WiFi.SSID());
-  preferences.putString("ssid",WiFi.SSID());
-  //Serial.println("Saved "+preferences.getString("ssid","nada"));
+  preferences.putString("ssid",String(WiFi.SSID()));
+  Serial.println("Saved "+preferences.getString("ssid","nada"));
 
   Serial.print("Password: ");
   Serial.println(WiFi.psk());
-  preferences.putString("password",WiFi.psk());
+  preferences.putString("password",String(WiFi.psk()));
 
   Serial.print("IP Address: ");
   Serial.println(WiFi.localIP());
@@ -199,7 +198,7 @@ void smartconfig_setup_wifi() {
   }
 }
 
-unsigned int  setup_wifi() {
+void setup_wifi() {
 
   delay(10);
   // We start by connecting to a WiFi network
@@ -211,14 +210,9 @@ unsigned int  setup_wifi() {
   WiFi.setAutoReconnect(true);
   WiFi.begin(ssid, password);
 
-  unsigned int cc =0;
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
-    cc++;
     Serial.print(".");
-    if(cc>=50) {
-      return 0;
-    }
   }
 
   randomSeed(micros());
@@ -230,7 +224,6 @@ unsigned int  setup_wifi() {
   if (WiFi.getSleep() == true) {
     WiFi.setSleep(false);
   }
-  return 1;
 }
 
 void callback(char* topic, byte* payload, unsigned int length) {
@@ -356,19 +349,14 @@ void setup() {
 
   //check nvm
   preferences.begin("credentials", false);
-  tmp = preferences.getString("ssid", "");
-  ssid = tmp.c_str();
-  tmp1 = preferences.getString("password", "");
-  password = tmp1.c_str();
-  Serial.println("Retrieved SSID: "+String(ssid));
+  ssid = preferences.getString("ssid", "").c_str();
+  password = preferences.getString("password", "").c_str();
+  Serial.println("Retrieved SSID"+String(ssid));
   if (strcmp(ssid,"")==0 || strcmp(password,"")==0) {
     smartconfig_setup_wifi();
   }
   else {
-    if(!setup_wifi()) {
-      Serial.println("Failed connecting to "+String(ssid));
-      smartconfig_setup_wifi();
-    }
+    setup_wifi();
   }
   //end check
 

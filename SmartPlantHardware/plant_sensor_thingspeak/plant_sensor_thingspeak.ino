@@ -507,8 +507,7 @@ void setup() {
     String err_tsl = "Ooops, no TSL2561 detected ... Check your wiring or I2C ADDR!";
     Serial.print(err_tsl);
     client.publish(debug_topic.c_str(), err_tsl.c_str());
-    while (1)
-      ;
+    //while (1);
   }
   /* Display some basic information on this sensor */
   displaySensorDetails();
