@@ -29,6 +29,8 @@ const int sensor_number = 3;
 
 String server_c = "https://open.plantbook.io/api/v1/plant/detail/";
 
+String pref_namespace = "credentials";
+
 /* Sensors */
 DHT11 dht11(5);
 String status_plant[sensor_number];
@@ -252,7 +254,12 @@ void callback(char* topic, byte* payload, unsigned int length) {
     Serial.println(tmp);
     client.publish(debug_topic.c_str(), tmp.c_str());
     esp_restart();
-  } else {
+  } else if (message == id_number+"-clear_preferences") {
+      Serial.print("Preferences cleared");
+      preferences.begin(pref_namespace.c_str(),false);
+    preferences.clear();
+    preferences.end();
+  }else {
     // Parse the JSON response
     DeserializationError error = deserializeJson(doc, message);
 
@@ -352,7 +359,7 @@ void setup() {
   topic = "smart_plants/#";     // + id_number;
 
   //check nvm
-  preferences.begin("credentials", false);
+  preferences.begin(pref_namespace.c_str(), false);
   tmp = preferences.getString("ssid", "");
   ssid = tmp.c_str();
   tmp1 = preferences.getString("password", "");

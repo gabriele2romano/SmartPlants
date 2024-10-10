@@ -14,12 +14,15 @@
 #include <math.h>
 
 Preferences preferences;  //to save in non volatile memory
-const char* ssid = "";
-const char* password = "";
+String pref_namespace = "credentials";
 
-#define soil_moisture_pin 0
-#define solenoid_pin 1  //This is the output pin on the Arduino we are using
-#define LED LED_BUILTIN
+const char *ssid = "";
+const char *password = "";
+
+#define soil_moisture_pin 35//0//
+#define solenoid_pin 27//2// //This is the output pin on the Arduino we are using
+#define dht11_pin 26//10//
+//#define LED LED_BUILTIN
 #define delay_readings 20000  //reading window sensor
 
 #define delay_moist_read 60000     //reading window moisture
@@ -73,7 +76,7 @@ unsigned long watering_for = 0;
 
 unsigned long last_moist_read = 0;
 
-DHT11 dht11(5); 
+DHT11 dht11(dht11_pin);
 Adafruit_TSL2561_Unified tsl = Adafruit_TSL2561_Unified(TSL2561_ADDR_FLOAT, 12345);
 
 void displaySensorDetails(void) {
@@ -231,16 +234,16 @@ void smartconfig_setup_wifi() {
 
   Serial.println("WiFi Connected.");
 
-  
+
 
   Serial.print("SSID: ");
   Serial.println(WiFi.SSID());
-  preferences.putString("ssid",WiFi.SSID());
+  preferences.putString("ssid", WiFi.SSID());
   //Serial.println("Saved "+preferences.getString("ssid","nada"));
 
   Serial.print("Password: ");
   Serial.println(WiFi.psk());
-  preferences.putString("password",WiFi.psk());
+  preferences.putString("password", WiFi.psk());
 
   Serial.print("IP Address: ");
   Serial.println(WiFi.localIP());
@@ -249,7 +252,7 @@ void smartconfig_setup_wifi() {
   }
 }
 
-unsigned int  setup_wifi() {
+unsigned int setup_wifi() {
 
   delay(10);
   // We start by connecting to a WiFi network
@@ -261,12 +264,12 @@ unsigned int  setup_wifi() {
   WiFi.setAutoReconnect(true);
   WiFi.begin(ssid, password);
 
-  unsigned int cc =0;
+  unsigned int cc = 0;
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     cc++;
     Serial.print(".");
-    if(cc>=50) {
+    if (cc >= 50) {
       return 0;
     }
   }
@@ -296,24 +299,27 @@ void callback(char *topic, byte *payload, unsigned int length) {
   Serial.println(message);
 
   // Check if the message is "1-shut_down"
-  if (message == id_number+ "-restart") {
+  if (message == id_number + "-restart") {
     // Reset the ESP32-C3
     tmp = "Resetting now...";
     Serial.println(tmp);
     client.publish(debug_topic.c_str(), tmp.c_str());
     esp_restart();
-  }
-  if (message == id_number + "-open") {
+  } else if (message == id_number + "-open") {
     // Reset the ESP32-C3
     tmp = "Opening Valve";
     openPump();
     client.publish(debug_topic.c_str(), tmp.c_str());
-  }
-  if (message == id_number + "-close") {
+  } else if (message == id_number + "-close") {
     // Reset the ESP32-C3
     tmp = "Closing Valve";
     closePump();
     client.publish(debug_topic.c_str(), tmp.c_str());
+  } else if (message == id_number + "-clear_preferences") {
+    Serial.print("Preferences cleared");
+    preferences.begin(pref_namespace.c_str(), false);
+    preferences.clear();
+    preferences.end();
   }
 }
 
@@ -323,7 +329,7 @@ void reconnect() {
   while (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
     // Create a random client ID
-    String clientId = "Plant-"+id_number;
+    String clientId = "Plant-" + id_number;
     // Attempt to connect
     client.setKeepAlive(90);  // setting keep alive to 90 seconds
     client.setBufferSize(512);
@@ -369,7 +375,7 @@ double calculateWaterVolume(double diameter, double length, double time_elapsed)
 }
 
 // LED control
-void ledON() {
+/* void ledON() {
   Serial.println("LED ON");
   digitalWrite(LED, LOW);
 }
@@ -377,7 +383,7 @@ void ledON() {
 void ledOFF() {
   Serial.println("LED OFF");
   digitalWrite(LED, HIGH);
-}
+} */
 
 void openPump() {
   Serial.println("Opened Pump");
@@ -503,24 +509,23 @@ void makeGetRequest() {
 
 void setup() {
   Serial.begin(115200);
-  pinMode(LED, OUTPUT);           // Initialize the BUILTIN_LED pin as an output
-  digitalWrite(LED, HIGH);        // turn off led
+  //pinMode(LED, OUTPUT);           // Initialize the BUILTIN_LED pin as an output
+  //digitalWrite(LED, HIGH);        // turn off led
   pinMode(solenoid_pin, OUTPUT);  //Sets the solenoid pin as an output
   topic = "smart_mirror";         //"smart_plants/" + id_number;
 
-//check nvm
-  preferences.begin("credentials", false);
+  //check nvm
+  preferences.begin(pref_namespace.c_str(), false);
   tmp = preferences.getString("ssid", "");
   ssid = tmp.c_str();
   tmp1 = preferences.getString("password", "");
   password = tmp1.c_str();
-  Serial.println("Retrieved SSID: "+String(ssid));
-  if (strcmp(ssid,"")==0 || strcmp(password,"")==0) {
+  Serial.println("Retrieved SSID: " + String(ssid));
+  if (strcmp(ssid, "") == 0 || strcmp(password, "") == 0) {
     smartconfig_setup_wifi();
-  }
-  else {
-    if(!setup_wifi()) {
-      Serial.println("Failed connecting to "+String(ssid));
+  } else {
+    if (!setup_wifi()) {
+      Serial.println("Failed connecting to " + String(ssid));
       smartconfig_setup_wifi();
     }
   }
@@ -660,7 +665,7 @@ void loop() {
       // set the fields with the values
       if (watering_for != 0) {
         double volume = calculateWaterVolume(DIAMETER, LENGHT, int(watering_for / 1000));
-        ThingSpeak.setField(1, int(volume));/* 
+        ThingSpeak.setField(1, int(volume)); /* 
         watering_for = 0; */
       }
       ThingSpeak.setField(2, temperature);
