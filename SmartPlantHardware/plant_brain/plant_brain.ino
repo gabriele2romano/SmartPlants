@@ -39,14 +39,13 @@ String status_description[sensor_number] = { " is too low.", " is normal.", " is
 /* Wifi */
 const char* mqtt_server = "mqtt-dashboard.com";
 
-int randNumber;
+String id_number = "00000000";
 String topic;
 String debug_topic = "smart_plants_debug";
 String smart_mirror_topic = "smart_mirror";
 
 String tmp;
 String tmp1;
-int wifi_cell = 1;
 const int maxTries = 50;
 
 WiFiClient espClient;
@@ -247,7 +246,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 
   // Check if the message is "1-shut_down"
-  if (message == "Brain-restart") {
+  if (message == id_number+"-restart") {
     // Reset the ESP32-C3
     tmp = "Resetting now...";
     Serial.println(tmp);
@@ -316,8 +315,7 @@ void reconnect() {
   while (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
     // Create a random client ID
-    String clientId = "Brain-";
-    clientId += String(randNumber, HEX);
+    String clientId = "Brain-"+id_number;
     // Attempt to connect
     client.setKeepAlive(90);  // setting keep alive to 90 seconds
     client.setBufferSize(512);
@@ -351,8 +349,7 @@ void setup() {
   Serial.begin(115200);
   pinMode(LED, OUTPUT);         // Initialize the BUILTIN_LED pin as an output
   digitalWrite(LED, HIGH);      //turn off led
-  randNumber = random(0xffff);  // random(256); //0 to 255
-  topic = "smart_plants/#";     // + String(randNumber);
+  topic = "smart_plants/#";     // + id_number;
 
   //check nvm
   preferences.begin("credentials", false);

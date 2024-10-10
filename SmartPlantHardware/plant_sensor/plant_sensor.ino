@@ -9,8 +9,11 @@
 #include <HTTPClient.h>
 #include <Preferences.h>  //for saving data built in
 #include <ArduinoJson.h>
-#include "../WifiCredentials.h"
 #include "Keys.h"
+
+Preferences preferences;  //to save in non volatile memory
+const char* ssid = "";
+const char* password = "";
 
 #define soil_moisture_pin 0
 #define solenoid_pin 1 //This is the output pin on the Arduino we are using
@@ -107,13 +110,13 @@ void configureSensor(void) {
 /* Wifi */
 const char *mqtt_server = "mqtt-dashboard.com";
 
-int randNumber;
+String id_number = "00000001"; //like serial code
 String topic; //topic used to send sensors data
 String debug_topic = "smart_plants_debug"; // topic used for debug messages. Ex: sensors not working properly.
 String status_topic; //topic used to send which parameters are not well for the plant
 
 String tmp;
-int wifi_cell = 1;
+String tmp1;
 const int maxTries = 50;
 
 WiFiClient espClient;
@@ -152,32 +155,10 @@ void printWiFiStatus() {
   }
 }
 
-void setup_wifi() {
+void smartconfig_setup_wifi() {
+  delay(10);
 
-  /* delay(10);
-  // We start by connecting to a WiFi network
-  Serial.println();
-  Serial.print("Connecting to ");
-  Serial.println(ssids[wifi_cell]);
-
-  WiFi.mode(WIFI_STA);
-  WiFi.setAutoReconnect(true);
-  WiFi.begin(ssids[wifi_cell], passwords[wifi_cell]);
-
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-
-  randomSeed(micros());
-
-  Serial.println("");
-  Serial.println("WiFi connected");
-  Serial.println("IP address: ");
-  Serial.println(WiFi.localIP());
-  if (WiFi.getSleep() == true) {
-    WiFi.setSleep(false);
-  } *///Init WiFi as Station, start SmartConfig
+  //Init WiFi as Station, start SmartConfig
   WiFi.mode(WIFI_AP_STA);
   WiFi.beginSmartConfig();
 
@@ -200,14 +181,56 @@ void setup_wifi() {
 
   Serial.println("WiFi Connected.");
 
+  
+
+  Serial.print("SSID: ");
+  Serial.println(WiFi.SSID());
+  preferences.putString("ssid",WiFi.SSID());
+  //Serial.println("Saved "+preferences.getString("ssid","nada"));
+
+  Serial.print("Password: ");
+  Serial.println(WiFi.psk());
+  preferences.putString("password",WiFi.psk());
+
   Serial.print("IP Address: ");
   Serial.println(WiFi.localIP());
   if (WiFi.getSleep() == true) {
     WiFi.setSleep(false);
   }
+}
+
+unsigned int  setup_wifi() {
 
   delay(10);
+  // We start by connecting to a WiFi network
+  Serial.println();
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
 
+  WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
+  WiFi.begin(ssid, password);
+
+  unsigned int cc =0;
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    cc++;
+    Serial.print(".");
+    if(cc>=50) {
+      return 0;
+    }
+  }
+
+  randomSeed(micros());
+
+  Serial.println("");
+  Serial.println("WiFi connected");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+  if (WiFi.getSleep() == true) {
+    WiFi.setSleep(false);
+  }
+  return 1;
 }
 
 void callback(char *topic, byte *payload, unsigned int length) {
@@ -223,20 +246,20 @@ void callback(char *topic, byte *payload, unsigned int length) {
   Serial.println(message);
 
   // Check if the message is "1-shut_down"
-  if (message == String(randNumber) + "-restart") {
+  if (message == id_number + "-restart") {
     // Reset the ESP32-C3
     tmp = "Resetting now...";
     Serial.println(tmp);
     client.publish(debug_topic.c_str(), tmp.c_str());
     esp_restart();
   }
-  if (message == String(randNumber) + "-open") {
+  if (message == id_number + "-open") {
     // Reset the ESP32-C3
     tmp = "Opening Valve";
     openPump();
     client.publish(debug_topic.c_str(), tmp.c_str());
   }
-  if (message == String(randNumber) + "-close") {
+  if (message == id_number + "-close") {
     // Reset the ESP32-C3
     tmp = "Closing Valve";
     closePump();
@@ -249,9 +272,8 @@ void reconnect() {
   Serial.println("Reconnection..to MQTT Server");
   while (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
-    // Create a random client ID
-    String clientId = "Plant-";
-    clientId += String(randNumber, HEX);
+    // Set MQTT client ID
+    String clientId = "Plant-"+id_number;
     // Attempt to connect
     client.setKeepAlive(90);  // setting keep alive to 90 seconds
     client.setBufferSize(512);
@@ -406,9 +428,26 @@ void setup() {
   pinMode(LED, OUTPUT);         // Initialize the BUILTIN_LED pin as an output
   digitalWrite(LED, HIGH);      // turn off led
   pinMode(solenoid_pin, OUTPUT); //Sets the solenoid pin as an output
-  randNumber = random(0xffff);  // random(256); //0 to 255
-  topic = "smart_plants/" + String(randNumber);
-  setup_wifi();
+  topic = "smart_plants/" + id_number;
+  
+  //check nvm
+  preferences.begin("credentials", false);
+  tmp = preferences.getString("ssid", "");
+  ssid = tmp.c_str();
+  tmp1 = preferences.getString("password", "");
+  password = tmp1.c_str();
+  Serial.println("Retrieved SSID: "+String(ssid));
+  if (strcmp(ssid,"")==0 || strcmp(password,"")==0) {
+    smartconfig_setup_wifi();
+  }
+  else {
+    if(!setup_wifi()) {
+      Serial.println("Failed connecting to "+String(ssid));
+      smartconfig_setup_wifi();
+    }
+  }
+  //end check
+
   client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
 
