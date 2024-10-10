@@ -15,9 +15,10 @@ Preferences preferences;  //to save in non volatile memory
 const char* ssid = "";
 const char* password = "";
 
-#define soil_moisture_pin 0
-#define solenoid_pin 1 //This is the output pin on the Arduino we are using
-#define LED LED_BUILTIN
+#define soil_moisture_pin 35//0//
+#define solenoid_pin 27//2// //This is the output pin on the Arduino we are using
+#define dht11_pin 26//10//
+//#define LED LED_BUILTIN
 #define delay_readings 20000 //reading window sensor
 
 #define delay_moist_read 60000 //reading window moisture
@@ -59,7 +60,7 @@ unsigned long watering_for = 0;
 
 unsigned long last_moist_read = 0;
 
-DHT11 dht11(10);
+DHT11 dht11(dht11_pin);
 Adafruit_TSL2561_Unified tsl = Adafruit_TSL2561_Unified(TSL2561_ADDR_FLOAT, 12345);
 
 void displaySensorDetails(void) {
@@ -291,7 +292,7 @@ void reconnect() {
 }
 
 // LED control
-void ledON() {
+/* void ledON() {
   Serial.println("LED ON");
   digitalWrite(LED, LOW);
 }
@@ -299,7 +300,7 @@ void ledON() {
 void ledOFF() {
   Serial.println("LED OFF");
   digitalWrite(LED, HIGH);
-}
+} */
 
 void openPump(){
   Serial.println("Opened Pump");
@@ -425,8 +426,8 @@ void makeGetRequest() {
 
 void setup() {
   Serial.begin(115200);
-  pinMode(LED, OUTPUT);         // Initialize the BUILTIN_LED pin as an output
-  digitalWrite(LED, HIGH);      // turn off led
+  //pinMode(LED, OUTPUT);         // Initialize the BUILTIN_LED pin as an output
+  //digitalWrite(LED, HIGH);      // turn off led
   pinMode(solenoid_pin, OUTPUT); //Sets the solenoid pin as an output
   topic = "smart_plants/" + id_number;
   

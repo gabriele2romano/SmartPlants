@@ -16,7 +16,7 @@ Preferences preferences;  //to save in non volatile memory
 const char* ssid = "";
 const char* password = "";
 
-#define LED 2
+/* #define LED 2 */
 #define delay_readings 30000  //60000
 
 #define DHT_delay 500
@@ -30,7 +30,7 @@ const int sensor_number = 3;
 String server_c = "https://open.plantbook.io/api/v1/plant/detail/";
 
 /* Sensors */
-DHT11 dht11(26);
+DHT11 dht11(5);
 String status_plant[sensor_number];
 String param[sensor_number] = { "Temperature", "Humidity", "Sunlight" };
 String status_description[sensor_number] = { " is too low.", " is normal.", " is too high." };
@@ -334,7 +334,7 @@ void reconnect() {
 }
 
 //LED control
-void ledON() {
+/* void ledON() {
   Serial.println("LED ON");
   digitalWrite(LED, LOW);
 }
@@ -342,13 +342,13 @@ void ledON() {
 void ledOFF() {
   Serial.println("LED OFF");
   digitalWrite(LED, HIGH);
-}
+} */
 //END LED control
 
 void setup() {
   Serial.begin(115200);
-  pinMode(LED, OUTPUT);         // Initialize the BUILTIN_LED pin as an output
-  digitalWrite(LED, HIGH);      //turn off led
+  //pinMode(LED, OUTPUT);         // Initialize the BUILTIN_LED pin as an output
+  //digitalWrite(LED, HIGH);      //turn off led
   topic = "smart_plants/#";     // + id_number;
 
   //check nvm

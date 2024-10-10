@@ -73,7 +73,7 @@ unsigned long watering_for = 0;
 
 unsigned long last_moist_read = 0;
 
-DHT11 dht11(10);
+DHT11 dht11(5); 
 Adafruit_TSL2561_Unified tsl = Adafruit_TSL2561_Unified(TSL2561_ADDR_FLOAT, 12345);
 
 void displaySensorDetails(void) {
