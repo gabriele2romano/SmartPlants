@@ -12,6 +12,9 @@
 #include "Keys.h"
 #include "ThingSpeak.h"  // always include thingspeak header file after other header files and custom macros
 #include <math.h>
+/* #include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
+#include <WebSerial.h> */
 
 Preferences preferences;  //to save in non volatile memory
 String pref_namespace = "credentials";
@@ -19,14 +22,14 @@ String pref_namespace = "credentials";
 const char *ssid = "";
 const char *password = "";
 
-#define soil_moisture_pin 35//0//
-#define solenoid_pin 27//2// //This is the output pin on the Arduino we are using
-#define dht11_pin 26//10//
+#define soil_moisture_pin 35  //0//
+#define solenoid_pin 27       //2// //This is the output pin on the Arduino we are using
+#define dht11_pin 26          //10//
 //#define LED LED_BUILTIN
-#define delay_readings 20000  //reading window sensor
+#define delay_readings 3600000  //reading window sensor
 
-#define delay_moist_read 60000     //reading window moisture
-#define watering_time_cost 120000  //max watering time
+#define delay_moist_read 1800000   //reading window moisture
+#define watering_time_cost 300000  //max watering time
 
 #define DHT_delay 500
 #define uS_TO_S_FACTOR 1000000 /* Conversion factor for micro seconds to seconds */
@@ -179,7 +182,23 @@ const char *messages_friendly[sensor_number][sensor_number][sensor_number] = {
       "Phew... it\'s too hot, humid, and very bright here. Can you find a cooler and more comfortable environment?" } }
 };
 /* END MQTT Messages*/
-void printWiFiStatus() {
+
+/* WebSerial */
+/* AsyncWebServer server(80); */
+/* END WebSerial */
+
+/* void callback_webserial(uint8_t *data, size_t len){
+  WebSerial.println("Received Data...");
+  String d = "";
+  for(int i=0; i < len; i++){
+    d += char(data[i]);
+  }
+  WebSerial.println(d);
+  //if (d == "test"){}
+}
+*/
+
+  void printWiFiStatus() {
   switch (WiFi.status()) {
     case WL_IDLE_STATUS:
       Serial.println("WiFi status: IDLE");
@@ -507,6 +526,9 @@ void makeGetRequest() {
   }
 }
 
+
+int temperature = 0;
+int humidity = 0;
 void setup() {
   Serial.begin(115200);
   //pinMode(LED, OUTPUT);           // Initialize the BUILTIN_LED pin as an output
@@ -514,7 +536,7 @@ void setup() {
   pinMode(solenoid_pin, OUTPUT);  //Sets the solenoid pin as an output
   topic = "smart_mirror";         //"smart_plants/" + id_number;
 
-  //check nvm
+  /* Check flash memory */
   preferences.begin(pref_namespace.c_str(), false);
   tmp = preferences.getString("ssid", "");
   ssid = tmp.c_str();
@@ -529,12 +551,21 @@ void setup() {
       smartconfig_setup_wifi();
     }
   }
-  //end check
+  /* END Check Flash Memory */
 
+  /* WebSerial Setup  */
+  // WebSerial is accessible at "<IP Address>/webserial" in browser
+  /* WebSerial.begin(&server);
+  WebSerial.onMessage(callback_webserial);
+  server.begin(); */
+  /* END WebSerial Setup */
+
+  /* ThingSpeak Setup */
   ThingSpeak.begin(thingSpeakClient);  // Initialize ThingSpeak
 
   client.setServer(mqtt_server, 1883);  //Initialize server mqtt
   client.setCallback(callback);         //set how to handle messages
+  /* END ThingSpeak Setup */
 
   /* DB */
   plant.replace(" ", "%20");
@@ -563,10 +594,113 @@ void setup() {
   Serial.println(tmp);
   client.publish(debug_topic.c_str(), tmp.c_str());
   /* END Sensor setup */
-}
 
-int temperature = 0;
-int humidity = 0;
+  /* sleep setup */
+  //not useful for now
+  /* end sleep setup */
+
+  reconnect();
+  int soil_moisture = analogRead(soil_moisture_pin);
+  unsigned long now = millis();  //esp_timer_get_time(); may work better han millis
+  /* First Cycle Moisture*/
+  if (watering_time == 0 && soil_moisture > max_soil_ec) {
+    lastWatering = now;
+    watering_time = watering_time_cost;  //120sec
+    Serial.print(String(soil_moisture) + " ");
+    openPump();
+  } else if (watering_time != 0 && (soil_moisture < (max_soil_ec - 100) || now - lastWatering > watering_time)) {
+    Serial.print(String(soil_moisture) + " ");
+    closePump();
+    watering_time = 0;
+    watering_for = now - lastWatering;
+    Serial.println("Watered for: " + String(watering_for / 1000) + "seconds");
+  }
+  if (soil_moisture < min_soil_ec) {
+    watering_for = -1;
+    Serial.println("Expose to Sun");
+  }
+  /* END First Cycle Moisture*/
+  /* First Cycle Sensors*/
+  // Attempt to read the temperature and humidity values from the DHT11 sensor.
+  int result_dht11 = dht11.readTemperatureHumidity(temperature, humidity);
+  if (result_dht11 != 0) {
+    // Print error message based on the error code.
+
+    tmp = DHT11::getErrorString(result_dht11);
+    Serial.println(tmp);
+    client.publish(debug_topic.c_str(), tmp.c_str());
+  }
+
+  // Get a new sensor event
+  sensors_event_t event;
+  tsl.getEvent(&event);
+
+  /*
+        0: Too Low
+        1: Ok
+        2: Too High
+      */
+  unsigned int status_light = 1;
+  unsigned int status_temp = 1;
+  unsigned int status_hum = 1;
+  if (max_light_lux - event.light < 0) status_light = 2;
+  else if (min_light_lux - event.light > 0) status_light = 0;
+
+  if (max_temp - temperature < 0) status_temp = 2;
+  else if (min_temp - temperature > 0) status_temp = 0;
+
+  if (max_env_humid - humidity < 0) status_hum = 2;
+  else if (min_env_humid - humidity > 0) status_hum = 0;
+  String mess = "";  //"From " + plant + ": ";
+
+  const char *message_m = messages_friendly[status_temp][status_hum][status_light];
+  mess += message_m;
+
+
+  if (watering_for == -1 && status_hum == 2 && status_light == 0) {
+    mess += " My moisture is too wet!";
+  }
+
+  tmp = "{\"plant\": \"" + display_pid + "\",\"plant_img\": \"" + image_url.c_str() + "\", \"watering_time\": \"" + String(int(watering_for / 1000)) + "\",\"sensors\": {\"soil_moisture\":\"" + String(soil_moisture) + "\", \"temperature\": \"" + String(temperature) + "\", \"humidity\": \"" + String(humidity) + "\", \"light\": \"" + String(event.light) + "\"},\"message\": \"" + mess + "\"}";
+
+
+  Serial.print("Publish message: ");
+  Serial.println(tmp.c_str());
+  client.publish(topic.c_str(), tmp.c_str());
+
+  /* ThingSpeak */
+  // set the fields with the values
+  if (watering_for != 0) {
+    double volume = calculateWaterVolume(DIAMETER, LENGHT, int(watering_for / 1000));
+    ThingSpeak.setField(1, int(volume)); /* 
+        watering_for = 0; */
+  }
+  ThingSpeak.setField(2, temperature);
+  ThingSpeak.setField(3, humidity);
+  ThingSpeak.setField(4, int(event.light));
+  ThingSpeak.setField(5, soil_moisture);
+  // write to the ThingSpeak channel
+  int x = ThingSpeak.writeFields(myChannelNumber, myWriteAPIKey);
+  if (x == 200) {
+    Serial.println("Channel update successful.");
+  } else {
+    Serial.println("Problem updating channel. HTTP error code " + String(x));
+  }
+
+  if (watering_for != 0) {
+    double volume = calculateWaterVolume(DIAMETER, LENGHT, int(watering_for / 1000));
+    ThingSpeak.setField(1, int(volume));
+    int water_channel = ThingSpeak.writeFields(myWaterChannelNumber, myWaterWriteAPIKey);
+    if (water_channel == 200) {
+      Serial.println("Water Channel update successful.");
+    } else {
+      Serial.println("Problem updating water channel. HTTP error code " + String(water_channel));
+    }
+    watering_for = 0;
+  }
+  /* END ThingSpeak */
+  /* END First Cycle Sensors*/
+}
 void loop() {
   //printWiFiStatus();
   //Serial.println("MQTT Client is: " + String(client.connected()));
@@ -634,15 +768,6 @@ void loop() {
 
       if (max_env_humid - humidity < 0) status_hum = 2;
       else if (min_env_humid - humidity > 0) status_hum = 0;
-
-      /*  if (watering_for != 0) {
-        snprintf(msg, MSG_BUFFER_SIZE, "{room: 0, plant: '%s', plant_img: '%s',  sensors: {soil_moisture: %ld, temperature: %ld, humidity: %ld, light: %.2f}, watering_time: %ld, status: {temperature: %ld, humidity: %ld, light: %ld}}", display_pid, image_url.c_str(), soil_moisture, temperature, humidity, event.light, int(watering_for / 1000), status_temp, status_hum, status_light);
-        double volume =  calculateWaterVolume(DIAMETER, LENGHT, int(watering_for / 1000));
-        ThingSpeak.setField(1,int(volume));
-        watering_for = 0;
-      } else {
-        snprintf(msg, MSG_BUFFER_SIZE, "{room: 0, plant: '%s', plant_img: '%s', sensors: {soil_moisture: %ld, temperature: %ld, humidity: %ld, light: %.2f}, watering_time: 0, status: {temperature: %ld, humidity: %ld, light: %ld}}", display_pid, image_url.c_str(), soil_moisture, temperature, humidity, event.light, status_temp, status_hum, status_light);
-      } */
 
       String mess = "";  //"From " + plant + ": ";
 
