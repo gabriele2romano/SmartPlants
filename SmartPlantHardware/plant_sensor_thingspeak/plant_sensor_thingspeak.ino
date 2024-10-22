@@ -133,7 +133,7 @@ const char *mqtt_server = "mqtt-dashboard.com";
 String id_number = "00000002";
 String topic;                               //topic used to send sensors data
 String debug_topic = "smart_plants_debug";  // topic used for debug messages. Ex: sensors not working properly.
-String status_topic;                        //topic used to send which parameters are not well for the plant
+//String status_topic;                        //topic used to send which parameters are not well for the plant
 
 String tmp;
 String tmp1;
@@ -551,6 +551,7 @@ void setup() {
       smartconfig_setup_wifi();
     }
   }
+  preferences.end();
   /* END Check Flash Memory */
 
   /* WebSerial Setup  */
