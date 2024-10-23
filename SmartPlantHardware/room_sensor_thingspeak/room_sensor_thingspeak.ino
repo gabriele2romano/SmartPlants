@@ -14,6 +14,7 @@
 #include <Firebase_ESP_Client.h>
 #include <addons/TokenHelper.h>  // Provide the token generation process info.
 #include <addons/RTDBHelper.h>   // Provide the RTDB payload printing info and other helper functions.
+#include <WebServer.h>
 
 Preferences preferences;  //to save in non volatile memory
 String pref_namespace = "credentials";
@@ -22,7 +23,7 @@ const char* ssid = "";
 const char* password = "";
 
 //#define LED 2
-#define delay_readings 30000  //60000
+#define delay_readings 5000  //60000
 
 #define DHT_delay 500
 #define uS_TO_S_FACTOR 1000000 /* Conversion factor for micro seconds to seconds */
@@ -36,6 +37,8 @@ const char* myFirebaseKey = FIREBASE_KEY;
 // Insert Authorized Email and Corresponding Password
 const char* user_mail = "esp@smartplants.com";
 const char* user_password = "espdefault";
+
+String user_id = "";
 
 // Define Firebase Data object
 FirebaseData fbdo;
@@ -59,6 +62,13 @@ DHT11 dht11(26);
 /* END Sensors */
 
 /* Wifi */
+
+// Define the web server on port 80
+/* WebServer server(80);
+
+// Flag to check if a packet has been received
+bool packetReceived = false; */
+
 const char* mqtt_server = "mqtt-dashboard.com";
 
 String id_number = "00000001";
@@ -70,6 +80,8 @@ String smart_mirror_topic = "smart_mirror";
 String tmp;
 String tmp1;
 const int maxTries = 50;
+
+String ip="";
 
 WiFiClient espClient;
 WiFiClient thingSpeakClient;
@@ -111,6 +123,40 @@ void printWiFiStatus() {
   }
 }
 
+/* void handleCredentials() {
+  if (server.hasArg("user_id")) {
+    user_id = server.arg("user_id");
+    Serial.println("Received User ID" + user_id);
+
+    preferences.putString("user_id", user_id);
+
+    // Here you can save these credentials to memory or use them immediately
+    server.send(200, "text/plain", "Credentials received");
+  } else {
+    server.send(400, "text/plain", "Missing credentials");
+  }
+  server.stop();
+} */
+// Function to handle incoming request
+/* void handleRequest() {
+  if (!packetReceived) {
+    // Respond to the client
+    server.send(200, "text/plain", "Packet received!");
+    Serial.println("Packet received");
+
+    // Mark that a packet has been received
+    packetReceived = true;
+
+    // Stop the server to ensure only one packet is received
+    server.stop();
+    Serial.println("Server stopped after receiving one packet.");
+  } else {
+    // If another request is made, respond with an error
+    server.send(403, "text/plain", "Server is no longer accepting requests.");
+  }
+} */
+
+
 void smartconfig_setup_wifi() {
   delay(10);
 
@@ -149,6 +195,7 @@ void smartconfig_setup_wifi() {
 
   Serial.print("IP Address: ");
   Serial.println(WiFi.localIP());
+  ip = String(WiFi.localIP());
   if (WiFi.getSleep() == true) {
     WiFi.setSleep(false);
   }
@@ -182,6 +229,7 @@ unsigned int setup_wifi() {
   Serial.println("WiFi connected");
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
+  ip = String(WiFi.localIP());
   if (WiFi.getSleep() == true) {
     WiFi.setSleep(false);
   }
@@ -273,6 +321,9 @@ void callback(char* topic, byte* payload, unsigned int length) {
     preferences.begin(pref_namespace.c_str(), false);
     preferences.clear();
     preferences.end();
+  } else if (message.indexOf(ip) != -1) {
+    user_id = message.substring(message.indexOf(ip) + 1);
+    Serial.print("Received uid:" +user_id);
   }
 }
 
@@ -280,7 +331,7 @@ void reconnect() {
   // Loop until we're reconnected
   Serial.println("Reconnection..to MQTT Server");
   unsigned int c = 0;
-  while (!client.connected() && c<10) {
+  while (!client.connected() && c < 10) {
     Serial.print("Attempting MQTT connection...");
     // Create a random client ID
     String clientId = "Room-" + String(room_number);
@@ -340,7 +391,19 @@ void setup() {
   }
   /* END Check Flash Memory */
 
-  setup_firebase();
+  //setup_firebase();
+
+  /* Web Server */
+  // Start web server and define route to receive credentials
+  /* server.on("/send-credentials", HTTP_POST, handleCredentials);
+  server.begin(); */
+  //server.handleClient();
+
+  // Start the web server and set the route
+  /* server.on("/", HTTP_GET, handleRequest);
+  server.begin();
+  Serial.println("Server started. Waiting for packet..."); */
+  /* END Web Server */
 
   /* ThingSpeak Setup */
   ThingSpeak.begin(thingSpeakClient);  // Initialize ThingSpeak
@@ -389,18 +452,18 @@ void setup() {
   /* END Sensor setup */
 }
 
-void manage_serial_commands(){
-  if (Serial.available() > 0) { // Check if data is available to read
-    String command = Serial.readStringUntil('\n'); // Read the command until newline
-    command.trim(); // Remove any leading/trailing whitespace
+void manage_serial_commands() {
+  if (Serial.available() > 0) {                     // Check if data is available to read
+    String command = Serial.readStringUntil('\n');  // Read the command until newline
+    command.trim();                                 // Remove any leading/trailing whitespace
 
     // Execute the command
     if (command == "clear_preferences") {
-    Serial.print("Preferences cleared");
-    preferences.begin(pref_namespace.c_str(), false);
-    preferences.clear();
-    preferences.end();
-    }else {
+      Serial.print("Preferences cleared");
+      preferences.begin(pref_namespace.c_str(), false);
+      preferences.clear();
+      preferences.end();
+    } else {
       Serial.println("Unknown command");
     }
   }
@@ -415,7 +478,14 @@ void loop() {
     }
     client.loop();
 
-    if (Firebase.ready()) { //handle auth task firebase
+    /* if (user_id == "") {
+      server.handleClient();  // Listen for HTTP requests
+    } */
+    /* if (!packetReceived) {
+      server.handleClient();  // Listen for incoming clients
+    } */
+
+    if (Firebase.ready()) {  //handle auth task firebase
 
       unsigned long now = millis();
       if (now - lastMsg > (delay_readings - DHT_delay)) {
