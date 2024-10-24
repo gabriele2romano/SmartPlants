@@ -6,3 +6,5 @@
 #define SECRET_WRITE_APIKEY "QXHWUHZPDXK7JWQR"   // replace XYZ with your channel write API Key
 #define SECRET_WATER_WRITE_APIKEY "MYKKEZ28L77ZC51E"   // replace XYZ with your channel write API Key
 
+#define FIREBASE_URL "smart-plants-ae494-default-rtdb.europe-west1.firebasedatabase.app"
+#define FIREBASE_KEY "AIzaSyAYDhdecDOuwZXvNEiWBZ0Dcwxr2LSe-8U"

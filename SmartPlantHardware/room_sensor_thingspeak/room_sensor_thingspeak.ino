@@ -1,29 +1,51 @@
 #include <WiFi.h>
-#include <PubSubClient.h>
+//#include <PubSubClient.h>
 #include <DHT11.h>
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_TSL2561_U.h>
 #include "esp_system.h"
-#include <WiFiClientSecure.h>
+//#include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <Preferences.h>  //for saving data built in
 #include <ArduinoJson.h>
 #include "Keys.h"
-#include "ThingSpeak.h"  // always include thingspeak header file after other header files and custom macros
+//#include "ThingSpeak.h"  // always include thingspeak header file after other header files and custom macros
 #include <Firebase_ESP_Client.h>
 #include <addons/TokenHelper.h>  // Provide the token generation process info.
 #include <addons/RTDBHelper.h>   // Provide the RTDB payload printing info and other helper functions.
 #include <WebServer.h>
+#include <time.h>  //for time stamp
+
+/* NTP Timestamp */
+// NTP server to get time
+const char *ntpServer = "pool.ntp.org";
+const long gmtOffset_sec = 0;      // Adjust this according to your timezone
+const int daylightOffset_sec = 0;  // No daylight saving adjustment
+/* END NTP Timestamp */
 
 Preferences preferences;  //to save in non volatile memory
 String pref_namespace = "credentials";
 
 const char* ssid = "";
 const char* password = "";
+String user_id = "";
+
+
+String id_number = "00000001";
+int room_number = 1;
+/* WebServer */
+// Create an instance of the server
+WebServer server(80);
+// Define base SSID
+String ssid_ap_base = "ESP32_SmartPlants_AP_";
+String ssid_ap;
+/* END WebServer */
 
 //#define LED 2
-#define delay_readings 5000  //60000
+//#define delay_readings 10000  //60000
+#define delay_firebase 1500//60000
+int delay_readings = 1800000;
 
 #define DHT_delay 500
 #define uS_TO_S_FACTOR 1000000 /* Conversion factor for micro seconds to seconds */
@@ -38,8 +60,6 @@ const char* myFirebaseKey = FIREBASE_KEY;
 const char* user_mail = "esp@smartplants.com";
 const char* user_password = "espdefault";
 
-String user_id = "";
-
 // Define Firebase Data object
 FirebaseData fbdo;
 
@@ -52,10 +72,7 @@ unsigned long myChannelNumber = SECRET_CH_ID;
 const char* myWriteAPIKey = SECRET_WRITE_APIKEY;
 /* END ThingSpeak Credentials*/
 
-
 const int sensor_number = 3;
-
-String server_c = "https://open.plantbook.io/api/v1/plant/detail/";
 
 /* Sensors */
 DHT11 dht11(26);
@@ -69,24 +86,21 @@ DHT11 dht11(26);
 // Flag to check if a packet has been received
 bool packetReceived = false; */
 
-const char* mqtt_server = "mqtt-dashboard.com";
-
-String id_number = "00000001";
-int room_number = 1;
+/* const char* mqtt_server = "mqtt-dashboard.com";
 String topic;
 String debug_topic = "smart_plants_debug";
-String smart_mirror_topic = "smart_mirror";
+String smart_mirror_topic = "smart_mirror"; */
 
 String tmp;
 String tmp1;
+String tmp2;
 const int maxTries = 50;
 
-String ip="";
-
-WiFiClient espClient;
-WiFiClient thingSpeakClient;
-PubSubClient client(espClient);
+//WiFiClient espClient;
+//WiFiClient thingSpeakClient;
+//PubSubClient client(espClient);
 unsigned long lastMsg = 0;
+unsigned long sendDataPrevMillis = 0;
 #define MSG_BUFFER_SIZE (512)
 char msg[MSG_BUFFER_SIZE];
 /* END Wifi */
@@ -123,41 +137,90 @@ void printWiFiStatus() {
   }
 }
 
-/* void handleCredentials() {
-  if (server.hasArg("user_id")) {
-    user_id = server.arg("user_id");
-    Serial.println("Received User ID" + user_id);
+void handleRoot() {
+  String html = "<html><body>";
+  html += "<h1>ESP32 Config</h1>";
+  html += "<form action='/submit' method='POST'>";
+  html += "SSID: <input type='text' name='ssid'><br>";
+  html += "Password: <input type='password' name='password'><br>";
+  html += "User ID: <input type='text' name='user_id'><br>";
+  html += "<input type='submit' value='Submit'>";
+  html += "</form></body></html>";
+  server.send(200, "text/html", html);
+}
 
-    preferences.putString("user_id", user_id);
+void handleSubmit() {
+  if (server.hasArg("ssid") && server.hasArg("password") && server.hasArg("user_id")) {
+    String _ssid = server.arg("ssid");
+    String _password = server.arg("password");
+    String _user_id = server.arg("user_id");
 
-    // Here you can save these credentials to memory or use them immediately
-    server.send(200, "text/plain", "Credentials received");
+    // Store Wi-Fi credentials and user ID for further use
+    Serial.println("Received Wi-Fi credentials:");
+    Serial.println("SSID: " + _ssid);
+    Serial.println("Password: " + _password);
+    Serial.println("User ID: " + _user_id);
+
+    // Save these credentials and try to connect to the Wi-Fi network
+    WiFi.begin(_ssid.c_str(), _password.c_str());
+
+    int count = 0;
+    while (WiFi.status() != WL_CONNECTED && count < 20) {
+      delay(500);
+      Serial.print(".");
+      count++;
+    }
+
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("\nWiFi connected successfully!");
+      preferences.putString("ssid", _ssid);
+      preferences.putString("password", _password);
+      preferences.putString("user_id", _user_id);
+      if (WiFi.getSleep() == true) {
+        WiFi.setSleep(false);
+      }
+      server.send(200, "text/html", "Connected successfully! ESP32 is now online.");
+    } else {
+      Serial.println("\nWiFi connection failed!");
+      server.send(200, "text/html", "Wi-Fi connection failed. Please try again.");
+    }
   } else {
-    server.send(400, "text/plain", "Missing credentials");
+    server.send(400, "text/html", "Invalid input.");
+  }
+}
+
+void setupWebServer() {
+  // Seed the random generator
+  randomSeed(analogRead(0));
+
+  // Generate a random number and append it to the base SSID
+  int randomNumber = random(1000, 9999);  // Random 4-digit number
+  ssid_ap = ssid_ap_base + String(randomNumber);
+
+  // Set up the ESP32 as an Access Point
+  WiFi.softAP(ssid_ap);
+  Serial.println("Access Point started");
+
+  // Print the IP address for the AP
+  Serial.println(WiFi.softAPIP());
+
+  // Handle web server routes
+  server.on("/", handleRoot);
+  server.on("/submit", HTTP_POST, handleSubmit);
+
+  // Start the server
+  server.begin();
+  Serial.println("Server started");
+
+  while (WiFi.status() != WL_CONNECTED) {
+    // Handle incoming client requests
+    server.handleClient();
   }
   server.stop();
-} */
-// Function to handle incoming request
-/* void handleRequest() {
-  if (!packetReceived) {
-    // Respond to the client
-    server.send(200, "text/plain", "Packet received!");
-    Serial.println("Packet received");
+  Serial.println("Server stopped");
+}
 
-    // Mark that a packet has been received
-    packetReceived = true;
-
-    // Stop the server to ensure only one packet is received
-    server.stop();
-    Serial.println("Server stopped after receiving one packet.");
-  } else {
-    // If another request is made, respond with an error
-    server.send(403, "text/plain", "Server is no longer accepting requests.");
-  }
-} */
-
-
-void smartconfig_setup_wifi() {
+/* void smartconfig_setup_wifi() {
   delay(10);
 
   //Init WiFi as Station, start SmartConfig
@@ -199,7 +262,7 @@ void smartconfig_setup_wifi() {
   if (WiFi.getSleep() == true) {
     WiFi.setSleep(false);
   }
-}
+} */
 
 unsigned int setup_wifi() {
 
@@ -229,7 +292,6 @@ unsigned int setup_wifi() {
   Serial.println("WiFi connected");
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
-  ip = String(WiFi.localIP());
   if (WiFi.getSleep() == true) {
     WiFi.setSleep(false);
   }
@@ -296,7 +358,7 @@ void setup_firebase() {
   //config.timeout.rtdbStreamError = 3 * 1000;
 }
 
-void callback(char* topic, byte* payload, unsigned int length) {
+/* void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("Message arrived [");
   Serial.print(topic);
   Serial.print("] ");
@@ -323,7 +385,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     preferences.end();
   } else if (message.indexOf(ip) != -1) {
     user_id = message.substring(message.indexOf(ip) + 1);
-    Serial.print("Received uid:" +user_id);
+    Serial.print("Received uid:" + user_id);
   }
 }
 
@@ -351,7 +413,7 @@ void reconnect() {
     }
     c++;
   }
-}
+} */
 
 //LED control
 /* void ledON() {
@@ -365,14 +427,29 @@ void ledOFF() {
 } */
 //END LED control
 
+// Function to return the formatted time as a string
+String getFormattedTime() {
+  struct tm timeinfo;
+
+  // Get the local time
+  if (!getLocalTime(&timeinfo)) {
+    return "Failed to obtain time";
+  }
+
+  // Create formatted time string in "YYYY-MM-DD_HH-MM-SS"
+  char timeString[20];
+  strftime(timeString, sizeof(timeString), "%Y-%m-%d_%H-%M-%S", &timeinfo);
+
+  // Return the formatted string
+  return String(timeString);
+}
+
 
 int temperature = 0;
 int humidity = 0;
 void setup() {
   Serial.begin(115200);
-  //pinMode(LED, OUTPUT);         // Initialize the BUILTIN_LED pin as an output
-  //digitalWrite(LED, HIGH);      //turn off led
-  topic = "smart_plants/#";  // + String(randNumber);
+  //topic = "smart_plants/#";  // + String(randNumber);
 
   /* Check flash memory */
   preferences.begin(pref_namespace.c_str(), false);
@@ -380,48 +457,46 @@ void setup() {
   ssid = tmp.c_str();
   tmp1 = preferences.getString("password", "");
   password = tmp1.c_str();
+  tmp2 = preferences.getString("user_id", "");
+  user_id = tmp2.c_str();
   Serial.println("Retrieved SSID: " + String(ssid));
   if (strcmp(ssid, "") == 0 || strcmp(password, "") == 0) {
-    smartconfig_setup_wifi();
+    setupWebServer();
   } else {
     if (!setup_wifi()) {
       Serial.println("Failed connecting to " + String(ssid));
-      smartconfig_setup_wifi();
+      setupWebServer();
     }
   }
   /* END Check Flash Memory */
 
-  //setup_firebase();
+  /* NTP */
+  // Initialize NTP
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+  /* NTP */
 
-  /* Web Server */
-  // Start web server and define route to receive credentials
-  /* server.on("/send-credentials", HTTP_POST, handleCredentials);
-  server.begin(); */
-  //server.handleClient();
-
-  // Start the web server and set the route
-  /* server.on("/", HTTP_GET, handleRequest);
-  server.begin();
-  Serial.println("Server started. Waiting for packet..."); */
-  /* END Web Server */
+  setup_firebase();
+  //if (Firebase.ready()) fetchFirebaseVariables();
 
   /* ThingSpeak Setup */
-  ThingSpeak.begin(thingSpeakClient);  // Initialize ThingSpeak
+  /* ThingSpeak.begin(thingSpeakClient);  // Initialize ThingSpeak
 
   client.setServer(mqtt_server, 1883);  //Initialize server mqtt
-  client.setCallback(callback);         //set how to handle messages
+  client.setCallback(callback);         //set how to handle messages */
   /* END ThingSpeak Setup */
 
-  client.setServer(mqtt_server, 1883);
-  client.setCallback(callback);
+  /* client.setServer(mqtt_server, 1883);
+  client.setCallback(callback); */
 
+  tmp = "ALL SET!";
+  Serial.println(tmp);
   /* Sensor setup */
   //dht11.setDelay(delay_readings); // Set this to the desired reading delay. Default is 500ms.
 
   /* First Cycle Sensors*/
-  reconnect();
+  //reconnect();
   // Attempt to read the temperature and humidity values from the DHT11 sensor.
-  int result = dht11.readTemperatureHumidity(temperature, humidity);
+  /* int result = dht11.readTemperatureHumidity(temperature, humidity);
   if (result != 0) {
     // Print error message based on the error code.
     Serial.println(DHT11::getErrorString(result));
@@ -430,11 +505,11 @@ void setup() {
 
   snprintf(msg, MSG_BUFFER_SIZE, "{\"room\": 1,\"sensors\": {\"temperature\": \"%ld\", \"humidity\": \"%ld\"}}", temperature, humidity);
   Serial.print("Publish message: ");
-  Serial.println(msg);
-  client.publish(smart_mirror_topic.c_str(), msg);
+  Serial.println(msg); */
+  //client.publish(smart_mirror_topic.c_str(), msg);
 
   /* ThingSpeak */
-  ThingSpeak.setField(2, temperature);
+  /* ThingSpeak.setField(2, temperature);
   ThingSpeak.setField(3, humidity);
   // write to the ThingSpeak channel
   int x = ThingSpeak.writeFields(myChannelNumber, myWriteAPIKey);
@@ -442,13 +517,11 @@ void setup() {
     Serial.println("Channel update successful.");
   } else {
     Serial.println("Problem updating channel. HTTP error code " + String(x));
-  }
+  } */
   /* END ThingSpeak */
   /* END First Cycle Sensors*/
 
-  tmp = "ALL SET!";
-  Serial.println(tmp);
-  client.publish(debug_topic.c_str(), tmp.c_str());
+  //client.publish(debug_topic.c_str(), tmp.c_str());
   /* END Sensor setup */
 }
 
@@ -469,14 +542,54 @@ void manage_serial_commands() {
   }
 }
 
+void fetchFirebaseVariables() {
+  if (Firebase.RTDB.getInt(&fbdo, "/" + user_id + "/devices/" + id_number + "/interval")) {
+    //Serial.print("Data type: ");
+    //Serial.println(fbdo.dataType());
+
+    // Check if the data type is integer or number (Firebase can return "number" as well)
+    if (fbdo.dataType() == "int" || fbdo.dataType() == "number") {
+      //Serial.println("FB Data Fetched Successfully");
+      // Use the fetched integer value and calculate delay_readings
+      delay_readings = fbdo.intData() * mS_TO_S_FACTOR;
+      //Serial.println(delay_readings);
+    } else {
+      // Handle unexpected data types
+      Serial.println("Unexpected data type. Expected an integer.");
+    }
+  } else {
+    Serial.println("FB Data Fetching failed");
+    Serial.println("ERROR: " + fbdo.errorReason());
+  }
+  if (Firebase.RTDB.getInt(&fbdo, "/" + user_id + "/devices/" + id_number + "/room")) {
+    //Serial.print("Data type: ");
+    //Serial.println(fbdo.dataType());
+
+    // Check if the data type is integer or number (Firebase can return "number" as well)
+    if (fbdo.dataType() == "int" || fbdo.dataType() == "number") {
+      //Serial.println("FB Data Fetched Successfully");
+      // Use the fetched integer value and calculate delay_readings
+      room_number = fbdo.intData();
+      //Serial.println(delay_readings);
+    } else {
+      // Handle unexpected data types
+      Serial.println("Unexpected data type. Expected an integer.");
+    }
+  } else {
+    Serial.println("FB room number Data Fetching failed");
+    Serial.println("ERROR: " + fbdo.errorReason());
+  }
+}
+
 void loop() {
   manage_serial_commands();
   //Serial.println("WORKING");
+
   if (WiFi.status() == WL_CONNECTED) {  //Connected to WiFi
-    if (!client.connected()) {
+    /* if (!client.connected()) {
       reconnect();
     }
-    client.loop();
+    client.loop(); */
 
     /* if (user_id == "") {
       server.handleClient();  // Listen for HTTP requests
@@ -488,7 +601,16 @@ void loop() {
     if (Firebase.ready()) {  //handle auth task firebase
 
       unsigned long now = millis();
-      if (now - lastMsg > (delay_readings - DHT_delay)) {
+      if (now - sendDataPrevMillis > delay_firebase || sendDataPrevMillis == 0) {
+
+        fetchFirebaseVariables();
+      }
+
+      if (now - lastMsg > (delay_readings - DHT_delay) || lastMsg == 0) {
+        //check firebase
+        //fetchFirebaseVariables();
+
+        //Serial.println("WORKING TO PUBLUSH");
         lastMsg = now;
         // Attempt to read the temperature and humidity values from the DHT11 sensor.
         int result = dht11.readTemperatureHumidity(temperature, humidity);
@@ -498,13 +620,30 @@ void loop() {
         }
 
 
-        snprintf(msg, MSG_BUFFER_SIZE, "{\"room\": 1,\"sensors\": {\"temperature\": \"%ld\", \"humidity\": \"%ld\"}}", temperature, humidity);
+        snprintf(msg, MSG_BUFFER_SIZE, "{\"room\": \"%ld\",\"sensors\": {\"temperature\": \"%ld\", \"humidity\": \"%ld\"}}",room_number, temperature, humidity);
         Serial.print("Publish message: ");
         Serial.println(msg);
-        client.publish(smart_mirror_topic.c_str(), msg);
+        //client.publish(smart_mirror_topic.c_str(), msg);
 
+        
+        String timestamp = getFormattedTime();  // Get the current timestamp
+        // Prepare the JSON object for storing sensor data
+        FirebaseJson json;
+        json.set("/room", room_number);
+        json.set("/temperature", String(temperature));
+        json.set("/humidity", String(humidity));
+
+
+        // Store the data in Firebase
+        if (Firebase.RTDB.setJSON(&fbdo, "/" + user_id + "/devices/" + id_number + "/sensors/" + timestamp, &json)) {
+          Serial.println("Sensor data stored successfully in Firebase");
+        } else {
+          // Handle errors
+          Serial.println("Failed to store sensor data in Firebase");
+          Serial.println("ERROR: " + fbdo.errorReason());
+        }
         /* ThingSpeak */
-        ThingSpeak.setField(2, temperature);
+        /* ThingSpeak.setField(2, temperature);
         ThingSpeak.setField(3, humidity);
         // write to the ThingSpeak channel
         int x = ThingSpeak.writeFields(myChannelNumber, myWriteAPIKey);
@@ -512,7 +651,7 @@ void loop() {
           Serial.println("Channel update successful.");
         } else {
           Serial.println("Problem updating channel. HTTP error code " + String(x));
-        }
+        } */
         /* END ThingSpeak */
       }
     }
