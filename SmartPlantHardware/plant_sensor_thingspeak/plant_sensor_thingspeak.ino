@@ -24,8 +24,8 @@
 /* NTP Timestamp */
 // NTP server to get time
 const char *ntpServer = "pool.ntp.org";
-const long gmtOffset_sec = 0;      // Adjust this according to your timezone
-const int daylightOffset_sec = 0;  // No daylight saving adjustment
+const long gmtOffset_sec = 3600;      // Adjust this according to your timezone
+const int daylightOffset_sec = 3600;  // No daylight saving adjustment
 /* END NTP Timestamp */
 
 Preferences preferences;  //to save in non volatile memory
@@ -35,7 +35,9 @@ const char *ssid = "";
 const char *password = "";
 String user_id = "";
 
-String id_number = "00000002";
+#define ID_NUMBER "00000002"
+#define TYPE "plant_sensor" //type of device
+
 int room_number = 1;
 /* WebServer */
 // Create an instance of the server
@@ -50,7 +52,7 @@ String ssid_ap;
 #define dht11_pin 26          //10//
 //#define LED LED_BUILTIN
 //#define delay_readings 3600000  //reading window sensor
-#define delay_firebase 1500  //60000
+#define delay_firebase 15000  //60000
 int delay_readings = 3600000;
 
 //#define delay_moist_read 1800000   //reading window moisture
@@ -456,7 +458,7 @@ void setup_firebase() {
   fbdo.setBSSLBufferSize(4096 /* Rx buffer size in bytes from 512 - 16384 */, 1024 /* Tx buffer size in bytes from 512 - 16384 */);
 
   // Limit the size of response payload to be collected in FirebaseData
-  fbdo.setResponseSize(2048);
+  //fbdo.setResponseSize(2048);
 
   Firebase.begin(&config, &auth);
 
@@ -466,19 +468,16 @@ void setup_firebase() {
 
   // You can use TCP KeepAlive in FirebaseData object and tracking the server connection status, please read this for detail.
   // https://github.com/mobizt/Firebase-ESP-Client#about-firebasedata-object
-  fbdo.keepAlive(5, 5, 1);
+  //fbdo.keepAlive(5, 5, 1);
 
   //Network reconnect timeout (interval) in ms (10 sec - 5 min) when network or WiFi disconnected.
-  config.timeout.networkReconnect = 10 * 1000;
-
-  //Network reconnect timeout (interval) in ms (10 sec - 5 min) when network or WiFi disconnected.
-  //config.timeout.networkReconnect = 10 * 1000;
+  //config.timeout.networkReconnect = 15 * 1000;
 
   //Socket connection and SSL handshake timeout in ms (1 sec - 1 min).
-  //config.timeout.socketConnection = 10 * 1000;
+  //config.timeout.socketConnection = 15 * 1000;
 
   //Server response read timeout in ms (1 sec - 1 min).
-  //config.timeout.serverResponse = 10 * 1000;
+  //config.timeout.serverResponse = 15 * 1000;
 
   //RTDB Stream keep-alive timeout in ms (20 sec - 2 min) when no server's keep-alive event data received.
   //config.timeout.rtdbKeepAlive = 45 * 1000;
@@ -504,23 +503,23 @@ void setup_firebase() {
   Serial.println(message);
 
   // Check if the message is "1-shut_down"
-  if (message == id_number + "-restart") {
+  if (message == String(ID_NUMBER) + "-restart") {
     // Reset the ESP32-C3
     tmp = "Resetting now...";
     Serial.println(tmp);
     client.publish(debug_topic.c_str(), tmp.c_str());
     esp_restart();
-  } else if (message == id_number + "-open") {
+  } else if (message == String(ID_NUMBER) + "-open") {
     // Reset the ESP32-C3
     tmp = "Opening Valve";
     openPump();
     client.publish(debug_topic.c_str(), tmp.c_str());
-  } else if (message == id_number + "-close") {
+  } else if (message == String(ID_NUMBER) + "-close") {
     // Reset the ESP32-C3
     tmp = "Closing Valve";
     closePump();
     client.publish(debug_topic.c_str(), tmp.c_str());
-  } else if (message == id_number + "-clear_preferences") {
+  } else if (message == String(ID_NUMBER) + "-clear_preferences") {
     Serial.print("Preferences cleared");
     preferences.begin(pref_namespace.c_str(), false);
     preferences.clear();
@@ -534,7 +533,7 @@ void reconnect() {
   while (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
     // Create a random client ID
-    String clientId = "Plant-" + id_number;
+    String clientId = "Plant-" + String(ID_NUMBER);
     // Attempt to connect
     client.setKeepAlive(90);  // setting keep alive to 90 seconds
     client.setBufferSize(512);
@@ -736,7 +735,7 @@ void setup() {
   //pinMode(LED, OUTPUT);           // Initialize the BUILTIN_LED pin as an output
   //digitalWrite(LED, HIGH);        // turn off led
   pinMode(solenoid_pin, OUTPUT);  //Sets the solenoid pin as an output
-  //topic = "smart_mirror";         //"smart_plants/" + id_number;
+  //topic = "smart_mirror";         //"smart_plants/" + String(ID_NUMBER);
 
   /* Check flash memory */
   preferences.begin(pref_namespace.c_str(), false);
@@ -925,10 +924,10 @@ void manage_serial_commands() {
 
 
 void fetchFirebaseVariables() {
-  if (Firebase.RTDB.getInt(&fbdo, "/" + user_id + "/devices/" + id_number + "/interval")) {
+  if (Firebase.RTDB.getInt(&fbdo, "/" + user_id + "/devices/" + String(ID_NUMBER) + "/interval")) {
     //Serial.print("Data type: ");
     //Serial.println(fbdo.dataType());
-//Serial.println("/" + user_id + "/devices/" + id_number + "/interval");
+    //Serial.println("/" + user_id + "/devices/" + String(ID_NUMBER) + "/interval");
     // Check if the data type is integer or number (Firebase can return "number" as well)
     if (fbdo.dataType() == "int" || fbdo.dataType() == "number") {
       //Serial.println("FB Data Fetched Successfully");
@@ -943,7 +942,7 @@ void fetchFirebaseVariables() {
     Serial.println("FB interval Data Fetching failed");
     Serial.println("ERROR: " + fbdo.errorReason());
   }
-  if (Firebase.RTDB.getString(&fbdo, "/" + user_id + "/devices/" + id_number + "/plant")) {
+  if (Firebase.RTDB.getString(&fbdo, "/" + user_id + "/devices/" + String(ID_NUMBER) + "/plant")) {
     //Serial.print("Data type: ");
     //Serial.println(fbdo.dataType());
     // Check if the data type is integer or number (Firebase can return "number" as well)
@@ -960,7 +959,7 @@ void fetchFirebaseVariables() {
     Serial.println("FB plant Data Fetching failed");
     Serial.println("ERROR: " + fbdo.errorReason());
   }
-  if (Firebase.RTDB.getInt(&fbdo, "/" + user_id + "/devices/" + id_number + "/interval_moisture")) {
+  if (Firebase.RTDB.getInt(&fbdo, "/" + user_id + "/devices/" + String(ID_NUMBER) + "/interval_moisture")) {
     //Serial.print("Data type: ");
     //Serial.println(fbdo.dataType());
 
@@ -978,7 +977,7 @@ void fetchFirebaseVariables() {
     Serial.println("FB moisture interval Data Fetching failed");
     Serial.println("ERROR: " + fbdo.errorReason());
   }
-  if (Firebase.RTDB.getInt(&fbdo, "/" + user_id + "/devices/" + id_number + "/max_watering_time")) {
+  if (Firebase.RTDB.getInt(&fbdo, "/" + user_id + "/devices/" + String(ID_NUMBER) + "/max_watering_time")) {
     //Serial.print("Data type: ");
     //Serial.println(fbdo.dataType());
 
@@ -996,7 +995,7 @@ void fetchFirebaseVariables() {
     Serial.println("FB max watering time Data Fetching failed");
     Serial.println("ERROR: " + fbdo.errorReason());
   }
-  if (Firebase.RTDB.getInt(&fbdo, "/" + user_id + "/devices/" + id_number + "/room")) {
+  if (Firebase.RTDB.getInt(&fbdo, "/" + user_id + "/devices/" + String(ID_NUMBER) + "/room")) {
     //Serial.print("Data type: ");
     //Serial.println(fbdo.dataType());
 
@@ -1017,6 +1016,10 @@ void fetchFirebaseVariables() {
 }
 
 void loop() {
+  if (Firebase.isTokenExpired()) {
+    Serial.println("Refreshed Firebase Token");
+    Firebase.refreshToken(&config);
+  }
   manage_serial_commands();
   if (WiFi.status() == WL_CONNECTED) {  //Connected to WiFi
     /* if (!client.connected()) {
@@ -1024,10 +1027,12 @@ void loop() {
     }
     client.loop(); */
 
-    if (Firebase.ready()) {          //handle auth task firebase
+    if (Firebase.ready()) {
       unsigned long now = millis();  //esp_timer_get_time(); may work better han millis
       if (now - sendDataPrevMillis > delay_firebase || sendDataPrevMillis == 0) {
-
+        Serial.println("Heap:");
+        Serial.println(ESP.getFreeHeap());  //handle auth task firebase
+        sendDataPrevMillis = millis();
         fetchFirebaseVariables();
       }
 
@@ -1105,7 +1110,7 @@ void loop() {
         Serial.println(tmp.c_str());
         //client.publish(topic.c_str(), tmp.c_str());
         // Write the string to the specified path in Firebase
-        if (Firebase.RTDB.setString(&fbdo, "/" + user_id + "/devices/" + id_number + "/last_message", mess)) {
+        if (Firebase.RTDB.setString(&fbdo, "/" + user_id + "/devices/" + String(ID_NUMBER) + "/last_message", mess)) {
           Serial.println("Last Message stored successfully in Firebase");
         } else {
           // Handle errors
@@ -1116,18 +1121,24 @@ void loop() {
         String timestamp = getFormattedTime();  // Get the current timestamp
         // Prepare the JSON object for storing sensor data
         FirebaseJson json;
+        if (watering_for != 0) {
+          double volume = calculateWaterVolume(DIAMETER, LENGHT, int(watering_for / 1000));
+          json.set("/water", volume);
+          json.set("/watering_time", watering_for / 1000);
+        }
+        json.set("/plant", plant);
         json.set("/room", room_number);
-        json.set("/light", String(event.light));
-        json.set("/soil_moisture", String(soil_moisture));
-        json.set("/temperature", String(temperature));
-        json.set("/humidity", String(humidity));
+        json.set("/light", event.light);
+        json.set("/soil_moisture", soil_moisture);
+        json.set("/temperature", temperature);
+        json.set("/humidity", humidity);
         // Print the JSON data to verify its structure
         /* String jsonString;
         json.toString(jsonString, true);
         Serial.println("JSON Data: " + jsonString); */
 
-        // Store the data in Firebase
-        if (Firebase.RTDB.setJSON(&fbdo, "/" + user_id + "/devices/" + id_number + "/sensors/" + timestamp, &json)) {
+        // Store the data sensor in Firebase
+        if (Firebase.RTDB.setJSON(&fbdo, "/" + user_id + "/devices/" + String(ID_NUMBER) + "/sensors/" + timestamp, &json)) {
           Serial.println("Sensor data stored successfully in Firebase");
         } else {
           // Handle errors
@@ -1187,5 +1198,11 @@ void loop() {
     Serial.println("");
     Serial.print("Reconnected to wifi with Local IP:");
     Serial.println(WiFi.localIP());
+  }
+
+  if (!Firebase.ready()) {
+
+    Serial.println("Reconnecting to Firebase");
+    Firebase.begin(&config, &auth);  // Reinitialize Firebase connection
   }
 }
