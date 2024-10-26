@@ -181,7 +181,7 @@ void handleSubmit() {
       if (WiFi.getSleep() == true) {
         WiFi.setSleep(false);
       }
-      server.send(200, "text/html", "Connected successfully! ESP32 is now online.");
+      server.send(200, "text/html", "{\"id_number\":\""+String(ID_NUMBER)+"\",\"type\":\""+String(TYPE)+"\"}");//"Connected successfully! ESP32 is now online.");
     } else {
       Serial.println("\nWiFi connection failed!");
       server.send(200, "text/html", "Wi-Fi connection failed. Please try again.");
