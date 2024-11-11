@@ -35,8 +35,8 @@ const char *ssid = "";
 const char *password = "";
 String user_id = "";
 
-#define ID_NUMBER "00000002"
-#define TYPE "plant_sensor" //type of device
+#define ID_NUMBER "10000000"
+#define TYPE "plant_sensor"  //type of device
 
 int room_number = 1;
 /* WebServer */
@@ -53,10 +53,10 @@ String ssid_ap;
 //#define LED LED_BUILTIN
 //#define delay_readings 3600000  //reading window sensor
 #define delay_firebase 15000  //60000
-int delay_readings = 3600000;
+int delay_readings = 10000;//3600000;
 
 //#define delay_moist_read 1800000   //reading window moisture
-int delay_moist_read = 3600000;
+int delay_moist_read = 10000;//3600000;
 //#define watering_time_cost 300000  //max watering time
 int watering_time_cost = 3600000;
 
@@ -296,9 +296,12 @@ void handleSubmit() {
     Serial.println("Password: " + _password);
     Serial.println("User ID: " + _user_id);
 
-    // Save these credentials and try to connect to the Wi-Fi network
-    WiFi.begin(_ssid.c_str(), _password.c_str());
 
+    // Save these credentials and try to connect to the Wi-Fi network
+
+    //WiFi.mode(WIFI_STA); //added
+    //WiFi.setAutoReconnect(true); //added
+    WiFi.begin(_ssid.c_str(), _password.c_str());
     int count = 0;
     while (WiFi.status() != WL_CONNECTED && count < 20) {
       delay(500);
@@ -314,7 +317,7 @@ void handleSubmit() {
       if (WiFi.getSleep() == true) {
         WiFi.setSleep(false);
       }
-      server.send(200, "text/html", "Connected successfully! ESP32 is now online.");
+      server.send(200, "text/json", "{\"id_number\":\"" + String(ID_NUMBER) + "\",\"type\":\"" + String(TYPE) + "\",\"msg\":\"Connected successfully! ESP32 is now online.\"}");
     } else {
       Serial.println("\nWiFi connection failed!");
       server.send(200, "text/html", "Wi-Fi connection failed. Please try again.");
@@ -323,6 +326,13 @@ void handleSubmit() {
     server.send(400, "text/html", "Invalid input.");
   }
 }
+
+
+/* void handleReset() {
+  Serial.println("Resetting now");
+  server.send(200, "text/html", "Esp32 is resetting now");
+  esp_restart();
+} */
 
 void setupWebServer() {
   // Seed the random generator
@@ -342,15 +352,17 @@ void setupWebServer() {
   // Handle web server routes
   server.on("/", handleRoot);
   server.on("/submit", HTTP_POST, handleSubmit);
+  //server.on("/reset", HTTP_POST, handleReset);
 
   // Start the server
   server.begin();
   Serial.println("Server started");
 
-  while (WiFi.status() != WL_CONNECTED) {
+  while (true){//WiFi.status() != WL_CONNECTED) {
     // Handle incoming client requests
     server.handleClient();
   }
+
   server.stop();
   Serial.println("Server stopped");
 }

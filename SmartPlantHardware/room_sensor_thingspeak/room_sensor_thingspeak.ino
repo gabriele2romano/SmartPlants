@@ -19,7 +19,7 @@
 
 /* NTP Timestamp */
 // NTP server to get time
-const char *ntpServer = "pool.ntp.org";
+const char* ntpServer = "pool.ntp.org";
 const long gmtOffset_sec = 3600;      // Adjust this according to your timezone
 const int daylightOffset_sec = 3600;  // No daylight saving adjustment
 /* END NTP Timestamp */
@@ -32,8 +32,8 @@ const char* password = "";
 String user_id = "";
 
 
-#define ID_NUMBER "00000001" //act like serial id
-#define TYPE "room_sensor" //type of device
+#define ID_NUMBER "00000001"  //act like serial id
+#define TYPE "room_sensor"    //type of device
 
 int room_number = 1;
 /* WebServer */
@@ -46,7 +46,7 @@ String ssid_ap;
 
 //#define LED 2
 //#define delay_readings 10000  //60000
-#define delay_firebase 1500//60000
+#define delay_firebase 30000  //60000
 int delay_readings = 3600000;
 
 #define DHT_delay 500
@@ -78,6 +78,33 @@ const int sensor_number = 3;
 
 /* Sensors */
 DHT11 dht11(26);
+#define solenoid_pin 21
+bool open_p = false;
+
+
+void openPump() {
+  if (!open_p) {
+    Serial.println("Opened Pump");
+    //WebSerial.println("Opened Pump");
+    digitalWrite(solenoid_pin, HIGH);  //Switch Solenoid ON
+    open_p = true;
+  } else {
+    Serial.println("Pump already opened");
+    //WebSerial.println("Pump already opened");
+  }
+}
+
+void closePump() {
+  if (open_p) {
+    Serial.println("Closed Pump");
+    //WebSerial.println("Closed Pump");
+    digitalWrite(solenoid_pin, LOW);  //Switch Solenoid OFF
+    open_p = false;
+  } else {
+    Serial.println("Pump already closed");
+    //WebSerial.println("Pump already closed");
+  }
+}
 /* END Sensors */
 
 /* Wifi */
@@ -181,7 +208,7 @@ void handleSubmit() {
       if (WiFi.getSleep() == true) {
         WiFi.setSleep(false);
       }
-      server.send(200, "text/html", "{\"id_number\":\""+String(ID_NUMBER)+"\",\"type\":\""+String(TYPE)+"\"}");//"Connected successfully! ESP32 is now online.");
+      server.send(200, "text/html", "{\"id_number\":\"" + String(ID_NUMBER) + "\",\"type\":\"" + String(TYPE) + "\"}");  //"Connected successfully! ESP32 is now online.");
     } else {
       Serial.println("\nWiFi connection failed!");
       server.send(200, "text/html", "Wi-Fi connection failed. Please try again.");
@@ -452,6 +479,7 @@ int humidity = 0;
 void setup() {
   Serial.begin(115200);
   //topic = "smart_plants/#";  // + String(randNumber);
+  pinMode(solenoid_pin, OUTPUT);  //Sets the solenoid pin as an output
 
   /* Check flash memory */
   preferences.begin(pref_namespace.c_str(), false);
@@ -470,6 +498,7 @@ void setup() {
       setupWebServer();
     }
   }
+  Serial.println("Retrieved User Id: " + String(user_id));
   /* END Check Flash Memory */
 
   /* NTP */
@@ -538,6 +567,10 @@ void manage_serial_commands() {
       preferences.begin(pref_namespace.c_str(), false);
       preferences.clear();
       preferences.end();
+    } else if (command == "open") {
+      openPump();
+    } else if (command == "close") {
+      closePump();
     } else {
       Serial.println("Unknown command");
     }
@@ -628,12 +661,12 @@ void loop() {
         }
 
 
-        snprintf(msg, MSG_BUFFER_SIZE, "{\"room\": \"%ld\",\"sensors\": {\"temperature\": \"%ld\", \"humidity\": \"%ld\"}}",room_number, temperature, humidity);
+        snprintf(msg, MSG_BUFFER_SIZE, "{\"room\": \"%ld\",\"sensors\": {\"temperature\": \"%ld\", \"humidity\": \"%ld\"}}", room_number, temperature, humidity);
         Serial.print("Publish message: ");
         Serial.println(msg);
         //client.publish(smart_mirror_topic.c_str(), msg);
 
-        
+
         String timestamp = getFormattedTime();  // Get the current timestamp
         // Prepare the JSON object for storing sensor data
         FirebaseJson json;
