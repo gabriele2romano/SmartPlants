@@ -387,14 +387,22 @@ void callback(char *s_topic, byte *payload, unsigned int length) {
     if (strcmp(id, ID_NUMBER) == 0) {
       Serial.println("ID matches. Saving values to preferences.");
 
-      plant = String(jsonDoc["plant"]);
+      display_pid = String(jsonDoc["plant"]);
+      String tmp_plant = display_pid;
+      tmp_plant.replace(" ", "%20");
+      Serial.println(tmp_plant);
+      Serial.println(plant);
+      if (tmp_plant != plant) {
+        makeGetRequest(server_c + tmp_plant + "/");
+      }
+
       delay_readings = jsonDoc["delay_readings"];
       delay_moist_read = jsonDoc["delay_moist_read"];
       watering_time_cost = jsonDoc["watering_time_cost"];
       room_number = jsonDoc["room_number"];
       // Save values to preferences
       preferences.begin(pref_namespace.c_str(), false);  // Namespace: "plant_data"
-      preferences.putString("plant", plant);
+      preferences.putString("plant", display_pid);
       preferences.putInt("delay_readings", delay_readings);
       preferences.putInt("delay_moist_read", delay_moist_read);
       preferences.putInt("watering_time_cost", watering_time_cost);
@@ -402,7 +410,7 @@ void callback(char *s_topic, byte *payload, unsigned int length) {
       preferences.end();
 
       Serial.print("Plant: ");
-      Serial.println(plant);
+      Serial.println(display_pid);
       Serial.print("Delay readings: ");
       Serial.println(delay_readings);
       Serial.print("Delay moist readings: ");
@@ -550,14 +558,14 @@ void followRedirect(HTTPClient &http) {
   }
 }
 
-void makeGetRequest() {
+void makeGetRequest(String s) {
   WiFiClientSecure client_s;
   client_s.setInsecure();  // Use this only if you don't need SSL verification
   // Alternatively, use client.setCACert() to set a specific root CA certificate.
 
   HTTPClient http;
 
-  if (http.begin(client_s, server_c)) {
+  if (http.begin(client_s, s)) {
     http.addHeader("Authorization", "Token " + String(PLANTBOOK_API_KEY));
     //Serial.println("Added header: Authorization: " + String("Token " + apiKey));
 
@@ -673,7 +681,7 @@ void setup() {
   /* Check flash memory Data  */
   preferences.begin(pref_namespace.c_str(), false);
   tmp = preferences.getString("plant", "");
-  plant = tmp.c_str();
+  display_pid = tmp.c_str();
   tmp3 = preferences.getInt("delay_readings", delay_readings);
   delay_readings = tmp3;
   tmp3 = preferences.getInt("delay_moist_read", delay_moist_read);
@@ -686,7 +694,7 @@ void setup() {
 
   //wait for mqtt message
 
-  while (plant == "") {
+  while (display_pid == "") {
     if (WiFi.status() == WL_CONNECTED) {  //Connected to WiFi
       if (!client.connected()) {
         reconnect();
@@ -694,17 +702,18 @@ void setup() {
       client.loop();
     }
   }
-  Serial.println("Retrieved plant: " + String(plant));
+  Serial.println("Retrieved plant: " + String(display_pid));
 
   preferences.end();
   /* Check flash memory Data END */
 
   /* DB */
+  plant = display_pid;
   plant.replace(" ", "%20");
-  server_c += plant + "/";
-  Serial.println(server_c);
+  String server_c_temp = server_c + plant + "/";
+  Serial.println(server_c_temp);
 
-  makeGetRequest();
+  makeGetRequest(server_c_temp);
   /* END DB */
 
   /* Sensor setup */
