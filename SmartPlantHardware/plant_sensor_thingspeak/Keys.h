@@ -6,5 +6,8 @@
 #define SECRET_WRITE_APIKEY "19VLEJ64OSSGMUS2"//"QXHWUHZPDXK7JWQR"   // replace XYZ with your channel write API Key
 #define SECRET_WATER_WRITE_APIKEY "MYKKEZ28L77ZC51E"   // replace XYZ with your channel write API Key
 
-#define FIREBASE_URL "smart-plants-ae494-default-rtdb.europe-west1.firebasedatabase.app"
-#define FIREBASE_KEY "AIzaSyAYDhdecDOuwZXvNEiWBZ0Dcwxr2LSe-8U"
+#define MQTT_USER "esp32"
+#define MQTT_PASSWORD ">k2EWR7cd<L3orC4q:O&"
+
+//#define FIREBASE_URL "smart-plants-ae494-default-rtdb.europe-west1.firebasedatabase.app"
+//#define FIREBASE_KEY "AIzaSyAYDhdecDOuwZXvNEiWBZ0Dcwxr2LSe-8U"
