@@ -24,7 +24,6 @@ String user_id = "";
 #define ID_NUMBER "10000000"
 #define TYPE "plant_sensor"  //type of device
 
-int room_number = 1;
 /* WebServer */
 // Create an instance of the server
 WebServer server(80);
@@ -37,14 +36,12 @@ String ssid_ap;
 #define solenoid_pin 27       //2// //This is the output pin on the Arduino we are using
 #define dht11_pin 26          //10//
 //#define LED LED_BUILTIN
-//#define delay_readings 3600000  //reading window sensor
-#define delay_firebase 15000  //60000
-int delay_readings = 10000;//3600000;
 
-//#define delay_moist_read 1800000   //reading window moisture
-int delay_moist_read = 10000;//3600000;
-//#define watering_time_cost 300000  //max watering time
+String plant = "";              //"mimosa pudica";
+int delay_readings = 120000;    //3600000;
+int delay_moist_read = 240000;  //3600000;
 int watering_time_cost = 3600000;
+int room_number = 1;
 
 #define DHT_delay 500
 #define uS_TO_S_FACTOR 1000000 /* Conversion factor for micro seconds to seconds */
@@ -56,7 +53,6 @@ int watering_time_cost = 3600000;
 #define DIAMETER 0.003  // - diameter: Diameter of the tube in meters
 #define LENGHT 1.0      // - length: Length of the tube in meters
 
-String plant = "mimosa pudica";
 String server_c = "https://open.plantbook.io/api/v1/plant/detail/";
 
 /* ThingSpeak Credentials*/
@@ -144,7 +140,7 @@ void configureSensor(void) {
 const int sensor_number = 3;
 
 /* Wifi */
-const char *mqtt_server = "3350af7c3849438980ed8035e0dca9a9.s1.eu.hivemq.cloud";//"mqtt-dashboard.com";
+const char *mqtt_server = "3350af7c3849438980ed8035e0dca9a9.s1.eu.hivemq.cloud";  //"mqtt-dashboard.com";
 
 String topic;                               //topic used to send sensors data
 String debug_topic = "smart_plants_debug";  // topic used for debug messages. Ex: sensors not working properly.
@@ -153,9 +149,10 @@ String debug_topic = "smart_plants_debug";  // topic used for debug messages. Ex
 String tmp;
 String tmp1;
 String tmp2;
+int tmp3;
 const int maxTries = 50;
 
-WiFiClientSecure espClient;//WiFiClient espClient;
+WiFiClientSecure espClient;  //WiFiClient espClient;
 //WiFiClient thingSpeakClient;
 PubSubClient client(espClient);
 unsigned long lastMsg = 0;
@@ -314,7 +311,7 @@ void setupWebServer() {
   server.begin();
   Serial.println("Server started");
 
-  while (true){//WiFi.status() != WL_CONNECTED) {
+  while (true) {  //WiFi.status() != WL_CONNECTED) {
     // Handle incoming client requests
     server.handleClient();
   }
@@ -357,9 +354,9 @@ unsigned int setup_wifi() {
   return 1;
 }
 
-void callback(char *topic, byte *payload, unsigned int length) {
+void callback(char *s_topic, byte *payload, unsigned int length) {
   Serial.print("Message arrived [");
-  Serial.print(topic);
+  Serial.print(s_topic);
   Serial.print("] ");
 
   // Convert payload to a string
@@ -369,28 +366,86 @@ void callback(char *topic, byte *payload, unsigned int length) {
   }
   Serial.println(message);
 
-  // Check if the message is "1-shut_down"
-  if (message == String(ID_NUMBER) + "-restart") {
-    // Reset the ESP32-C3
-    tmp = "Resetting now...";
-    Serial.println(tmp);
-    client.publish(debug_topic.c_str(), tmp.c_str());
-    esp_restart();
-  } else if (message == String(ID_NUMBER) + "-open") {
-    // Reset the ESP32-C3
-    tmp = "Opening Valve";
-    openPump();
-    client.publish(debug_topic.c_str(), tmp.c_str());
-  } else if (message == String(ID_NUMBER) + "-close") {
-    // Reset the ESP32-C3
-    tmp = "Closing Valve";
-    closePump();
-    client.publish(debug_topic.c_str(), tmp.c_str());
-  } else if (message == String(ID_NUMBER) + "-clear_preferences") {
-    Serial.print("Preferences cleared");
-    preferences.begin(pref_namespace.c_str(), false);
-    preferences.clear();
-    preferences.end();
+  if (strcmp(s_topic, debug_topic.c_str()) == 0) {
+    // Parse JSON
+    StaticJsonDocument<256> jsonDoc;  // Adjust size based on expected JSON payload
+    DeserializationError error = deserializeJson(jsonDoc, message);
+
+    if (error) {
+      Serial.print("Failed to parse JSON: ");
+      Serial.println(error.c_str());
+      return;
+    }
+    // Extract values from the JSON
+    const char *id = jsonDoc["id"];
+
+    Serial.println("Extracted values:");
+    Serial.print("ID: ");
+    Serial.println(id);
+
+    // Compare ID with ID_NUMBER
+    if (strcmp(id, ID_NUMBER) == 0) {
+      Serial.println("ID matches. Saving values to preferences.");
+
+      plant = String(jsonDoc["plant"]);
+      delay_readings = jsonDoc["delay_readings"];
+      delay_moist_read = jsonDoc["delay_moist_read"];
+      watering_time_cost = jsonDoc["watering_time_cost"];
+      room_number = jsonDoc["room_number"];
+      // Save values to preferences
+      preferences.begin(pref_namespace.c_str(), false);  // Namespace: "plant_data"
+      preferences.putString("plant", plant);
+      preferences.putInt("delay_readings", delay_readings);
+      preferences.putInt("delay_moist_read", delay_moist_read);
+      preferences.putInt("watering_time_cost", watering_time_cost);
+      preferences.putInt("room_number", room_number);
+      preferences.end();
+
+      Serial.print("Plant: ");
+      Serial.println(plant);
+      Serial.print("Delay readings: ");
+      Serial.println(delay_readings);
+      Serial.print("Delay moist readings: ");
+      Serial.println(delay_moist_read);
+      Serial.print("Watering time cost: ");
+      Serial.println(watering_time_cost);
+      Serial.print("Room Number: ");
+      Serial.println(room_number);
+      Serial.println("Values saved successfully.");
+    } else {
+      Serial.println("ID does not match.");
+    }
+  } else if (strcmp(s_topic, topic.c_str()) == 0) {
+
+    // Check if the message is "1-shut_down"
+    if (message == String(ID_NUMBER) + "-restart") {
+      // Reset the ESP32-C3
+      tmp = "Resetting now...";
+      Serial.println(tmp);
+      //client.publish(debug_topic.c_str(), tmp.c_str());
+      esp_restart();
+    } else if (message == String(ID_NUMBER) + "-open") {
+      // Reset the ESP32-C3
+      tmp = "Opening Valve";
+      openPump();
+      //client.publish(debug_topic.c_str(), tmp.c_str());
+    } else if (message == String(ID_NUMBER) + "-close") {
+      // Reset the ESP32-C3
+      tmp = "Closing Valve";
+      closePump();
+      //client.publish(debug_topic.c_str(), tmp.c_str());
+    } else if (message == String(ID_NUMBER) + "-clear_preferences") {
+      Serial.print("Preferences cleared");
+      preferences.begin(pref_namespace.c_str(), false);
+      preferences.clear();
+      preferences.end();
+    } else if (message == String(ID_NUMBER) + "-clear_data_preferences") {
+      Serial.print("Data Preferences cleared");
+      preferences.begin(pref_namespace.c_str(), false);
+      preferences.remove("plant");
+      preferences.remove("interval");
+      preferences.end();
+    }
   }
 }
 
@@ -404,7 +459,7 @@ void reconnect() {
     // Attempt to connect
     client.setKeepAlive(90);  // setting keep alive to 90 seconds
     client.setBufferSize(512);
-    if (client.connect(clientId.c_str(),MQTT_USER,MQTT_PASSWORD)) {
+    if (client.connect(clientId.c_str(), MQTT_USER, MQTT_PASSWORD)) {
       Serial.println("connected");
       client.subscribe(debug_topic.c_str());
     } else {
@@ -587,7 +642,7 @@ void setup() {
   pinMode(solenoid_pin, OUTPUT);  //Sets the solenoid pin as an output
   topic = "smart_plants";         //"smart_plants/" + String(ID_NUMBER);
 
-  /* Check flash memory */
+  /* Check flash memory Wifi */
   preferences.begin(pref_namespace.c_str(), false);
   tmp = preferences.getString("ssid", "");
   ssid = tmp.c_str();
@@ -604,15 +659,45 @@ void setup() {
       setupWebServer();
     }
   }
+  preferences.end();
   /* END Check Flash Memory */
 
   /* ThingSpeak Setup */
   //ThingSpeak.begin(thingSpeakClient);  // Initialize ThingSpeak
   /* END ThingSpeak Setup */
 
-  client.setServer(mqtt_server, 8883);  //Initialize server mqtt 
+  client.setServer(mqtt_server, 8883);  //Initialize server mqtt
   client.setCallback(callback);         //set how to handle messages
   espClient.setInsecure();
+
+  /* Check flash memory Data  */
+  preferences.begin(pref_namespace.c_str(), false);
+  tmp = preferences.getString("plant", "");
+  plant = tmp.c_str();
+  tmp3 = preferences.getInt("delay_readings", delay_readings);
+  delay_readings = tmp3;
+  tmp3 = preferences.getInt("delay_moist_read", delay_moist_read);
+  delay_moist_read = tmp3;
+  tmp3 = preferences.getInt("watering_time_cost", watering_time_cost);
+  watering_time_cost = tmp3;
+  tmp3 = preferences.getInt("room_number", room_number);
+  room_number = tmp3;
+  Serial.println("Wainting for mqtt config message");
+
+  //wait for mqtt message
+
+  while (plant == "") {
+    if (WiFi.status() == WL_CONNECTED) {  //Connected to WiFi
+      if (!client.connected()) {
+        reconnect();
+      }
+      client.loop();
+    }
+  }
+  Serial.println("Retrieved plant: " + String(plant));
+
+  preferences.end();
+  /* Check flash memory Data END */
 
   /* DB */
   plant.replace(" ", "%20");
@@ -658,6 +743,12 @@ void manage_serial_commands() {
       preferences.begin(pref_namespace.c_str(), false);
       preferences.clear();
       preferences.end();
+    } else if (command == "clear_data_preferences") {
+      Serial.print("Data Preferences cleared");
+      preferences.begin(pref_namespace.c_str(), false);
+      preferences.remove("plant");
+      preferences.remove("interval");
+      preferences.end();
     } else {
       Serial.println("Unknown command");
     }
@@ -677,91 +768,91 @@ void loop() {
     client.loop();
 
     //if (Firebase.ready()) {
-      unsigned long now = millis();  //esp_timer_get_time(); may work better han millis
-      /* if (now - sendDataPrevMillis > delay_firebase || sendDataPrevMillis == 0) {
+    unsigned long now = millis();  //esp_timer_get_time(); may work better han millis
+    /* if (now - sendDataPrevMillis > delay_firebase || sendDataPrevMillis == 0) {
         Serial.println("Heap:");
         Serial.println(ESP.getFreeHeap());  //handle auth task firebase
         sendDataPrevMillis = millis();
         fetchFirebaseVariables();
       } */
 
-      if (now - last_moist_read > delay_moist_read || last_moist_read == 0) {
-        last_moist_read = now;
-        int soil_moisture = analogRead(soil_moisture_pin);
-        if (watering_time == 0 && soil_moisture > max_soil_ec) {
-          lastWatering = now;
-          watering_time = watering_time_cost;  //120sec
-          Serial.print(String(soil_moisture) + " ");
-          openPump();
-        } else if (watering_time != 0 && (soil_moisture < (max_soil_ec - 100) || now - lastWatering > watering_time)) {
-          Serial.print(String(soil_moisture) + " ");
-          closePump();
-          watering_time = 0;
-          watering_for = now - lastWatering;
-          Serial.println("Watered for: " + String(watering_for / 1000) + "seconds");
-        }
-        if (soil_moisture < min_soil_ec) {
-          watering_for = -1;
-          Serial.println("Expose to Sun");
-        }
+    if (now - last_moist_read > delay_moist_read || last_moist_read == 0) {
+      last_moist_read = now;
+      int soil_moisture = analogRead(soil_moisture_pin);
+      if (watering_time == 0 && soil_moisture > max_soil_ec) {
+        lastWatering = now;
+        watering_time = watering_time_cost;  //120sec
+        Serial.print(String(soil_moisture) + " ");
+        openPump();
+      } else if (watering_time != 0 && (soil_moisture < (max_soil_ec - 100) || now - lastWatering > watering_time)) {
+        Serial.print(String(soil_moisture) + " ");
+        closePump();
+        watering_time = 0;
+        watering_for = now - lastWatering;
+        Serial.println("Watered for: " + String(watering_for / 1000) + "seconds");
       }
+      if (soil_moisture < min_soil_ec) {
+        watering_for = -1;
+        Serial.println("Expose to Sun");
+      }
+    }
 
-      if (now - lastMsg > (delay_readings - DHT_delay) || lastMsg == 0) {
-        lastMsg = now; /* 
+    if (now - lastMsg > (delay_readings - DHT_delay) || lastMsg == 0) {
+      lastMsg = now; /* 
       int temperature = -1;
       int humidity = -1; */
-        int soil_moisture = analogRead(soil_moisture_pin);
-        // Attempt to read the temperature and humidity values from the DHT11 sensor.
-        int result_dht11 = dht11.readTemperatureHumidity(temperature, humidity);
-        if (result_dht11 != 0) {
-          // Print error message based on the error code.
+      int soil_moisture = analogRead(soil_moisture_pin);
+      // Attempt to read the temperature and humidity values from the DHT11 sensor.
+      int result_dht11 = dht11.readTemperatureHumidity(temperature, humidity);
+      if (result_dht11 != 0) {
+        // Print error message based on the error code.
 
-          tmp = DHT11::getErrorString(result_dht11);
-          Serial.println(tmp);
-          //client.publish(debug_topic.c_str(), tmp.c_str());
-        }
+        tmp = DHT11::getErrorString(result_dht11);
+        Serial.println(tmp);
+        //client.publish(debug_topic.c_str(), tmp.c_str());
+      }
 
-        // Get a new sensor event
-        sensors_event_t event;
-        tsl.getEvent(&event);
+      // Get a new sensor event
+      sensors_event_t event;
+      tsl.getEvent(&event);
 
-        /*
+      /*
         0: Too Low
         1: Ok
         2: Too High
       */
-        unsigned int status_light = 1;
-        unsigned int status_temp = 1;
-        unsigned int status_hum = 1;
-        if (max_light_lux - event.light < 0) status_light = 2;
-        else if (min_light_lux - event.light > 0) status_light = 0;
+      unsigned int status_light = 1;
+      unsigned int status_temp = 1;
+      unsigned int status_hum = 1;
+      if (max_light_lux - event.light < 0) status_light = 2;
+      else if (min_light_lux - event.light > 0) status_light = 0;
 
-        if (max_temp - temperature < 0) status_temp = 2;
-        else if (min_temp - temperature > 0) status_temp = 0;
+      if (max_temp - temperature < 0) status_temp = 2;
+      else if (min_temp - temperature > 0) status_temp = 0;
 
-        if (max_env_humid - humidity < 0) status_hum = 2;
-        else if (min_env_humid - humidity > 0) status_hum = 0;
+      if (max_env_humid - humidity < 0) status_hum = 2;
+      else if (min_env_humid - humidity > 0) status_hum = 0;
 
-        String mess = "";  //"From " + plant + ": ";
+      String mess = "";  //"From " + plant + ": ";
 
-        const char *message_m = messages_friendly[status_temp][status_hum][status_light];
-        mess += message_m;
-
-
-        if (watering_for == -1 && status_hum == 2 && status_light == 0) {
-          mess += " My moisture is too wet!";
-        }
-
-        tmp = "{\"user_id\":\""+user_id+"\",\"device_id\":\""+ID_NUMBER+"\",\"plant\": \"" + display_pid + "\",\"room\":\""+room_number+"\",\"plant_img\": \"" + image_url.c_str() + "\", \"watering_time\": \"" + String(int(watering_for / 1000)) + "\",\"sensors\": {\"soil_moisture\":\"" + String(soil_moisture) + "\", \"temperature\": \"" + String(temperature) + "\", \"humidity\": \"" + String(humidity) + "\", \"light\": \"" + String(event.light) + "\"},\"message\": \"" + mess + "\"}";
+      const char *message_m = messages_friendly[status_temp][status_hum][status_light];
+      mess += message_m;
 
 
-        Serial.print("Publish message: ");
-        Serial.println(tmp.c_str());
-        client.publish(topic.c_str(), tmp.c_str());
+      if (watering_for == -1 && status_hum == 2 && status_light == 0) {
+        mess += " My moisture is too wet!";
+      }
 
-        /* ThingSpeak */
-        // set the fields with the values
-        /* if (watering_for != 0) {
+      tmp = "{\"user_id\":\"" + user_id + "\",\"device_id\":\"" + ID_NUMBER + "\",\"plant\": \"" + display_pid + "\",\"room\":\"" + room_number + "\",\"plant_img\": \"" + image_url.c_str() + "\", \"watering_time\": \"" + String(int(watering_for / 1000)) + "\",\"sensors\": {\"soil_moisture\":\"" + String(soil_moisture) + "\", \"temperature\": \"" + String(temperature) + "\", \"humidity\": \"" + String(humidity) + "\", \"light\": \"" + String(event.light) + "\"},\"message\": \"" + mess + "\"}";
+
+
+      Serial.print("Publish message: ");
+      Serial.println(tmp.c_str());
+      client.publish(topic.c_str(), tmp.c_str());
+
+      /* ThingSpeak */
+      // set the fields with the values
+      /* if (watering_for != 0) {
         double volume = calculateWaterVolume(DIAMETER, LENGHT, int(watering_for / 1000));
         ThingSpeak.setField(1, int(volume));
       }
@@ -788,8 +879,8 @@ void loop() {
         }
         watering_for = 0;
       } */
-        /* END ThingSpeak */
-      }
+      /* END ThingSpeak */
+    }
     //}
   } else {
     //WiFi.disconnect();
