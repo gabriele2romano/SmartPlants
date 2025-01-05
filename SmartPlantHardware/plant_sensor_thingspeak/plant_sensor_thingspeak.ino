@@ -21,7 +21,7 @@ const char *ssid = "";
 const char *password = "";
 String user_id = "";
 
-#define ID_NUMBER "10000000"
+#define ID_NUMBER "20000000"
 #define TYPE "plant_sensor"  //type of device
 
 /* WebServer */
@@ -225,6 +225,7 @@ void printWiFiStatus() {
   }
 }
 
+bool wifi_set = false;
 void handleRoot() {
   String html = "<html><body>";
   html += "<h1>ESP32 Config</h1>";
@@ -267,10 +268,12 @@ void handleSubmit() {
       preferences.putString("ssid", _ssid);
       preferences.putString("password", _password);
       preferences.putString("user_id", _user_id);
+      user_id = _user_id;
       if (WiFi.getSleep() == true) {
         WiFi.setSleep(false);
       }
       server.send(200, "text/json", "{\"id_number\":\"" + String(ID_NUMBER) + "\",\"type\":\"" + String(TYPE) + "\",\"msg\":\"Connected successfully! ESP32 is now online.\"}");
+      wifi_set = true;
     } else {
       Serial.println("\nWiFi connection failed!");
       server.send(200, "text/html", "Wi-Fi connection failed. Please try again.");
@@ -311,7 +314,7 @@ void setupWebServer() {
   server.begin();
   Serial.println("Server started");
 
-  while (true) {  //WiFi.status() != WL_CONNECTED) {
+  while (!wifi_set) {  //WiFi.status() != WL_CONNECTED) {
     // Handle incoming client requests
     server.handleClient();
   }
@@ -690,7 +693,7 @@ void setup() {
   watering_time_cost = tmp3;
   tmp3 = preferences.getInt("room_number", room_number);
   room_number = tmp3;
-  Serial.println("Wainting for mqtt config message");
+  Serial.println("Waiting for mqtt config message");
 
   //wait for mqtt message
 
