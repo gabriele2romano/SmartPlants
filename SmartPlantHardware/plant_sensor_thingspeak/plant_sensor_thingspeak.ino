@@ -41,7 +41,7 @@ String plant = "";              //"mimosa pudica";
 int delay_readings = 120000;    //3600000;
 int delay_moist_read = 240000;  //3600000;
 int watering_time_cost = 3600000;
-int room_number = 1;
+int room_number = -1;
 
 #define DHT_delay 500
 #define uS_TO_S_FACTOR 1000000 /* Conversion factor for micro seconds to seconds */
@@ -522,15 +522,31 @@ void ledOFF() {
   digitalWrite(LED, HIGH);
 } */
 
+bool open_p = false;
 void openPump() {
-  Serial.println("Opened Pump");
-  digitalWrite(solenoid_pin, HIGH);  //Switch Solenoid ON
+  if (!open_p) {
+    Serial.println("Opened Pump");
+    //WebSerial.println("Opened Pump");
+    digitalWrite(solenoid_pin, HIGH);  //Switch Solenoid ON
+    open_p = true;
+  } else {
+    Serial.println("Pump already opened");
+    //WebSerial.println("Pump already opened");
+  }
 }
 
 void closePump() {
-  Serial.println("Closed Pump");
-  digitalWrite(solenoid_pin, LOW);  //Switch Solenoid OFF
+  if (open_p) {
+    Serial.println("Closed Pump");
+    //WebSerial.println("Closed Pump");
+    digitalWrite(solenoid_pin, LOW);  //Switch Solenoid OFF
+    open_p = false;
+  } else {
+    Serial.println("Pump already closed");
+    //WebSerial.println("Pump already closed");
+  }
 }
+
 
 void followRedirect(HTTPClient &http) {
   String newLocation = http.header("Location");
@@ -759,7 +775,10 @@ void manage_serial_commands() {
       Serial.print("Data Preferences cleared");
       preferences.begin(pref_namespace.c_str(), false);
       preferences.remove("plant");
-      preferences.remove("interval");
+      preferences.remove("delay_readings");
+      preferences.remove("delay_moist_read");
+      preferences.remove("watering_time_cost");
+      preferences.remove("room_number");
       preferences.end();
     } else {
       Serial.println("Unknown command");
@@ -768,10 +787,6 @@ void manage_serial_commands() {
 }
 
 void loop() {
-  /* if (Firebase.isTokenExpired()) {
-    Serial.println("Refreshed Firebase Token");
-    Firebase.refreshToken(&config);
-  } */
   manage_serial_commands();
   if (WiFi.status() == WL_CONNECTED) {  //Connected to WiFi
     if (!client.connected()) {
