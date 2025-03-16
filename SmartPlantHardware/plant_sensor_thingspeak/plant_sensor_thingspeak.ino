@@ -470,9 +470,13 @@ void reconnect() {
     // Attempt to connect
     client.setKeepAlive(90);  // setting keep alive to 90 seconds
     client.setBufferSize(512);
-    if (client.connect(clientId.c_str(), MQTT_USER, MQTT_PASSWORD)) {
+    
+    String willMessage = String(ID_NUMBER) + ":offline";
+    if (client.connect(clientId.c_str(), MQTT_USER, MQTT_PASSWORD,debug_topic.c_str(),1,false,willMessage.c_str())) {
       Serial.println("connected");
-      client.subscribe(debug_topic.c_str());
+      client.subscribe(debug_topic.c_str(),1);
+      String on_mess = String(ID_NUMBER) + ":online";
+      client.publish(debug_topic.c_str(), on_mess.c_str());
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
