@@ -21,7 +21,7 @@ const char *ssid = "";
 const char *password = "";
 String user_id = "";
 
-#define ID_NUMBER "20000000"
+#define ID_NUMBER "70000000"
 #define TYPE "plant_sensor"  //type of device
 
 /* WebServer */
@@ -140,7 +140,7 @@ void configureSensor(void) {
 const int sensor_number = 3;
 
 /* Wifi */
-const char *mqtt_server = "3350af7c3849438980ed8035e0dca9a9.s1.eu.hivemq.cloud";  //"mqtt-dashboard.com";
+const char *mqtt_server = "5e891ad171194908bc1513ff0916164c.s1.eu.hivemq.cloud";  //"mqtt-dashboard.com";
 
 String topic;                               //topic used to send sensors data
 String debug_topic = "smart_plants_debug";  // topic used for debug messages. Ex: sensors not working properly.
