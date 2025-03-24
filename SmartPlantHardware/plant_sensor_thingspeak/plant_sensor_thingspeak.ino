@@ -373,90 +373,95 @@ void callback(char *s_topic, byte *payload, unsigned int length) {
     // Parse JSON
     StaticJsonDocument<256> jsonDoc;  // Adjust size based on expected JSON payload
     DeserializationError error = deserializeJson(jsonDoc, message);
-
     if (error) {
       Serial.print("Failed to parse JSON: ");
-      Serial.println(error.c_str());
-      return;
-    }
-    // Extract values from the JSON
-    const char *id = jsonDoc["id"];
+      Serial.println("Trying to check debug commands");
 
-    Serial.println("Extracted values:");
-    Serial.print("ID: ");
-    Serial.println(id);
 
-    // Compare ID with ID_NUMBER
-    if (strcmp(id, ID_NUMBER) == 0) {
-      Serial.println("ID matches. Saving values to preferences.");
-
-      display_pid = String(jsonDoc["plant"]);
-      String tmp_plant = display_pid;
-      tmp_plant.replace(" ", "%20");
-      Serial.println(tmp_plant);
-      Serial.println(plant);
-      if (tmp_plant != plant) {
-        makeGetRequest(server_c + tmp_plant + "/");
+      // Check if the message is "1-shut_down"
+      if (message == String(ID_NUMBER) + "-restart") {
+        // Reset the ESP32-C3
+        tmp = "Resetting now...";
+        Serial.println(tmp);
+        //client.publish(debug_topic.c_str(), tmp.c_str());
+        esp_restart();
+      } else if (message == String(ID_NUMBER) + "-open") {
+        // Reset the ESP32-C3
+        tmp = "Opening Valve";
+        openPump();
+        //client.publish(debug_topic.c_str(), tmp.c_str());
+      } else if (message == String(ID_NUMBER) + "-close") {
+        // Reset the ESP32-C3
+        tmp = "Closing Valve";
+        closePump();
+        //client.publish(debug_topic.c_str(), tmp.c_str());
+      } else if (message == String(ID_NUMBER) + "-clear_preferences") {
+        Serial.print("Preferences cleared");
+        preferences.begin(pref_namespace.c_str(), false);
+        preferences.clear();
+        preferences.end();
+      } else if (message == String(ID_NUMBER) + "-clear_data_preferences") {
+        Serial.print("Data Preferences cleared");
+        preferences.begin(pref_namespace.c_str(), false);
+        preferences.remove("plant");
+        preferences.remove("interval");
+        preferences.end();
+      } else{
+        Serial.print("Command not found");
       }
-
-      delay_readings = jsonDoc["delay_readings"];
-      delay_moist_read = jsonDoc["delay_moist_read"];
-      watering_time_cost = jsonDoc["watering_time_cost"];
-      room_number = jsonDoc["room_number"];
-      // Save values to preferences
-      preferences.begin(pref_namespace.c_str(), false);  // Namespace: "plant_data"
-      preferences.putString("plant", display_pid);
-      preferences.putInt("delay_readings", delay_readings);
-      preferences.putInt("delay_moist_read", delay_moist_read);
-      preferences.putInt("watering_time_cost", watering_time_cost);
-      preferences.putInt("room_number", room_number);
-      preferences.end();
-
-      Serial.print("Plant: ");
-      Serial.println(display_pid);
-      Serial.print("Delay readings: ");
-      Serial.println(delay_readings);
-      Serial.print("Delay moist readings: ");
-      Serial.println(delay_moist_read);
-      Serial.print("Watering time cost: ");
-      Serial.println(watering_time_cost);
-      Serial.print("Room Number: ");
-      Serial.println(room_number);
-      Serial.println("Values saved successfully.");
     } else {
-      Serial.println("ID does not match.");
+
+      if (jsonDoc["id"] != NULL) {
+        // Extract values from the JSON
+        const char *id = jsonDoc["id"];
+
+        Serial.println("Extracted values:");
+        Serial.print("ID: ");
+        Serial.println(id);
+
+        // Compare ID with ID_NUMBER
+        if (strcmp(id, ID_NUMBER) == 0) {
+          Serial.println("ID matches. Saving values to preferences.");
+
+          display_pid = String(jsonDoc["plant"]);
+          String tmp_plant = display_pid;
+          tmp_plant.replace(" ", "%20");
+          Serial.println(tmp_plant);
+          Serial.println(plant);
+          if (tmp_plant != plant) {
+            makeGetRequest(server_c + tmp_plant + "/");
+          }
+
+          delay_readings = jsonDoc["delay_readings"];
+          delay_moist_read = jsonDoc["delay_moist_read"];
+          watering_time_cost = jsonDoc["watering_time_cost"];
+          room_number = jsonDoc["room_number"];
+          // Save values to preferences
+          preferences.begin(pref_namespace.c_str(), false);  // Namespace: "plant_data"
+          preferences.putString("plant", display_pid);
+          preferences.putInt("delay_readings", delay_readings);
+          preferences.putInt("delay_moist_read", delay_moist_read);
+          preferences.putInt("watering_time_cost", watering_time_cost);
+          preferences.putInt("room_number", room_number);
+          preferences.end();
+
+          Serial.print("Plant: ");
+          Serial.println(display_pid);
+          Serial.print("Delay readings: ");
+          Serial.println(delay_readings);
+          Serial.print("Delay moist readings: ");
+          Serial.println(delay_moist_read);
+          Serial.print("Watering time cost: ");
+          Serial.println(watering_time_cost);
+          Serial.print("Room Number: ");
+          Serial.println(room_number);
+          Serial.println("Values saved successfully.");
+        } else {
+          Serial.println("ID does not match.");
+        }
+      }
     }
   } else if (strcmp(s_topic, topic.c_str()) == 0) {
-
-    // Check if the message is "1-shut_down"
-    if (message == String(ID_NUMBER) + "-restart") {
-      // Reset the ESP32-C3
-      tmp = "Resetting now...";
-      Serial.println(tmp);
-      //client.publish(debug_topic.c_str(), tmp.c_str());
-      esp_restart();
-    } else if (message == String(ID_NUMBER) + "-open") {
-      // Reset the ESP32-C3
-      tmp = "Opening Valve";
-      openPump();
-      //client.publish(debug_topic.c_str(), tmp.c_str());
-    } else if (message == String(ID_NUMBER) + "-close") {
-      // Reset the ESP32-C3
-      tmp = "Closing Valve";
-      closePump();
-      //client.publish(debug_topic.c_str(), tmp.c_str());
-    } else if (message == String(ID_NUMBER) + "-clear_preferences") {
-      Serial.print("Preferences cleared");
-      preferences.begin(pref_namespace.c_str(), false);
-      preferences.clear();
-      preferences.end();
-    } else if (message == String(ID_NUMBER) + "-clear_data_preferences") {
-      Serial.print("Data Preferences cleared");
-      preferences.begin(pref_namespace.c_str(), false);
-      preferences.remove("plant");
-      preferences.remove("interval");
-      preferences.end();
-    }
   }
 }
 
@@ -470,13 +475,13 @@ void reconnect() {
     // Attempt to connect
     client.setKeepAlive(90);  // setting keep alive to 90 seconds
     client.setBufferSize(512);
-    
-    String willMessage = user_id+":"+String(ID_NUMBER) + ":offline";
-    if (client.connect(clientId.c_str(), MQTT_USER, MQTT_PASSWORD,debug_topic.c_str(),1,false,willMessage.c_str())) {
+
+    String willMessage = "{\"user_id\":\"" + user_id + "\",\"device_id\":\"" + ID_NUMBER + "\",\"status\": \"offline\"}";
+    if (client.connect(clientId.c_str(), MQTT_USER, MQTT_PASSWORD, debug_topic.c_str(), 1, false, willMessage.c_str())) {
       Serial.println("connected");
-      client.subscribe(debug_topic.c_str(),1);
-      String on_mess = user_id+":"+String(ID_NUMBER) + ":online";
-      client.publish(debug_topic.c_str(), on_mess.c_str());
+      String online_mess = "{\"user_id\":\"" + user_id + "\",\"device_id\":\"" + ID_NUMBER + "\",\"status\": \"online\"}";
+      client.publish(debug_topic.c_str(), online_mess.c_str());
+      client.subscribe(debug_topic.c_str(), 1);
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
