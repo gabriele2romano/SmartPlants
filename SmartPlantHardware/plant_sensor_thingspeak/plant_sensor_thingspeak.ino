@@ -273,7 +273,8 @@ void handleSubmit() {
         WiFi.setSleep(false);
       }
       server.send(200, "text/json", "{\"id_number\":\"" + String(ID_NUMBER) + "\",\"type\":\"" + String(TYPE) + "\",\"msg\":\"Connected successfully! ESP32 is now online.\"}");
-      wifi_set = true;
+      //wifi_set = true;
+      
     } else {
       Serial.println("\nWiFi connection failed!");
       server.send(200, "text/html", "Wi-Fi connection failed. Please try again.");
@@ -284,11 +285,12 @@ void handleSubmit() {
 }
 
 
-/* void handleReset() {
+void handleReset() {
   Serial.println("Resetting now");
+  delay(1000);  // Allow time for the response to be sent
   server.send(200, "text/html", "Esp32 is resetting now");
   esp_restart();
-} */
+}
 
 void setupWebServer() {
   // Seed the random generator
@@ -308,7 +310,7 @@ void setupWebServer() {
   // Handle web server routes
   server.on("/", handleRoot);
   server.on("/submit", HTTP_POST, handleSubmit);
-  //server.on("/reset", HTTP_POST, handleReset);
+  server.on("/reset", HTTP_POST, handleReset);
 
   // Start the server
   server.begin();
@@ -317,10 +319,10 @@ void setupWebServer() {
   while (!wifi_set) {  //WiFi.status() != WL_CONNECTED) {
     // Handle incoming client requests
     server.handleClient();
-  }
+  }/* 
 
   server.stop();
-  Serial.println("Server stopped");
+  Serial.println("Server stopped");   */
 }
 
 unsigned int setup_wifi() {
